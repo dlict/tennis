@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f392b" />
+      <stop offset="100%" stop-color="#051f15" />
+    </linearGradient>
+    <linearGradient id="ball" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#d4f933" />
+      <stop offset="100%" stop-color="#a8db16" />
+    </linearGradient>
+    <linearGradient id="glow" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#22c55e" stop-opacity="0.4" />
+      <stop offset="100%" stop-color="#22c55e" stop-opacity="0" />
+    </linearGradient>
+  </defs>
+  
+  <!-- App Background -->
+  <rect width="512" height="512" rx="112" fill="url(#bg)" />
+  <rect x="24" y="24" width="464" height="464" rx="92" fill="none" stroke="#22c55e" stroke-width="4" stroke-opacity="0.3" />
+  
+  <!-- Tennis Court lines overlay -->
+  <rect x="76" y="96" width="360" height="320" rx="8" fill="none" stroke="#ffffff" stroke-width="6" stroke-opacity="0.35" />
+  <line x1="76" y1="256" x2="436" y2="256" stroke="#ffffff" stroke-width="8" stroke-opacity="0.7" />
+  <line x1="256" y1="136" x2="256" y2="376" stroke="#ffffff" stroke-width="5" stroke-opacity="0.35" />
+  <line x1="136" y1="96" x2="136" y2="416" stroke="#ffffff" stroke-width="4" stroke-opacity="0.3" />
+  <line x1="376" y1="96" x2="376" y2="416" stroke="#ffffff" stroke-width="4" stroke-opacity="0.3" />
+
+  <!-- Tennis Ball Hero -->
+  <circle cx="256" cy="256" r="105" fill="url(#ball)" filter="drop-shadow(0 14px 28px rgba(0,0,0,0.45))" />
+  
+  <!-- Tennis ball seams -->
+  <path d="M 180 180 A 105 105 0 0 1 180 332" fill="none" stroke="#ffffff" stroke-width="9" stroke-linecap="round" />
+  <path d="M 332 180 A 105 105 0 0 0 332 332" fill="none" stroke="#ffffff" stroke-width="9" stroke-linecap="round" />
+
+  <!-- Analytics data bar badge at bottom right -->
+  <rect x="300" y="310" width="130" height="96" rx="20" fill="#1e293b" stroke="#38bdf8" stroke-width="4" filter="drop-shadow(0 8px 16px rgba(0,0,0,0.5))" />
+  <rect x="320" y="370" width="16" height="22" rx="4" fill="#38bdf8" />
+  <rect x="344" y="350" width="16" height="42" rx="4" fill="#22c55e" />
+  <rect x="368" y="336" width="16" height="56" rx="4" fill="#facc15" />
+  <rect x="392" y="324" width="16" height="68" rx="4" fill="#ec4899" />
+</svg>

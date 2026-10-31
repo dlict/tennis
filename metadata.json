@@ -1,0 +1,6 @@
+{
+  "name": "TennisPro Scoreboard & Analytics",
+  "description": "แอปพลิเคชันนับแต้มเทนนิสระดับโปร รองรับเดี่ยวและคู่ หน้าจอแนวนอนสำหรับมือถือ บันทึกช็อตแต้มแบบสมจริง ซิงค์สถิติสดลง Google Sheets กราฟฟอร์มและวิเคราะห์สนามหลังแข่ง พร้อมใช้งานออฟไลน์ PWA",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

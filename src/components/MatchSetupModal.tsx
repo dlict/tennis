@@ -1,0 +1,348 @@
+import React, { useState } from 'react';
+import { MatchFormat, MatchSettings, MatchType, TiebreakFormat } from '../types/tennis';
+import { Users, User as UserIcon, Play, Settings2, X } from 'lucide-react';
+import { getSavedPlayerRoster, saveMultiplePlayersToRoster } from '../utils/playerRoster';
+
+interface MatchSetupModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onStartMatch: (
+    settings: MatchSettings,
+    t1Name: string,
+    t2Name: string,
+    t1DoublesPartner?: string,
+    t2DoublesPartner?: string,
+    initialServer?: 'team1' | 'team2'
+  ) => void;
+}
+
+export const MatchSetupModal: React.FC<MatchSetupModalProps> = ({
+  isOpen,
+  onClose,
+  onStartMatch,
+}) => {
+  const [matchType, setMatchType] = useState<MatchType>('singles');
+  const [format, setFormat] = useState<MatchFormat>('3sets');
+  const [adRule, setAdRule] = useState<'advantage' | 'no-ad'>('advantage');
+  const [finalSetTiebreak, setFinalSetTiebreak] = useState<'standard' | 'super'>('standard');
+  const [courtSurface, setCourtSurface] = useState<'hard' | 'clay' | 'grass'>('hard');
+
+  const [t1Name, setT1Name] = useState('Player 1');
+  const [t2Name, setT2Name] = useState('Player 2');
+  const [t1Partner, setT1Partner] = useState('Partner 1');
+  const [t2Partner, setT2Partner] = useState('Partner 2');
+  const [initialServer, setInitialServer] = useState<'team1' | 'team2'>('team1');
+  const [savedRoster] = useState<string[]>(() => getSavedPlayerRoster());
+
+  if (!isOpen) return null;
+
+  const handleStart = (e: React.FormEvent) => {
+    e.preventDefault();
+    const finalT1Name = t1Name.trim() || 'Player 1';
+    const finalT2Name = t2Name.trim() || 'Player 2';
+    const finalT1Partner = matchType === 'doubles' ? t1Partner.trim() || 'Partner 1' : undefined;
+    const finalT2Partner = matchType === 'doubles' ? t2Partner.trim() || 'Partner 2' : undefined;
+
+    // Automatically remember player names in roster for subsequent matches
+    saveMultiplePlayersToRoster([finalT1Name, finalT2Name, finalT1Partner, finalT2Partner]);
+
+    const settings: MatchSettings = {
+      type: matchType,
+      format,
+      tiebreakFormat: 'standard7',
+      adRule,
+      finalSetTiebreak,
+      courtSurface,
+    };
+    onStartMatch(
+      settings,
+      finalT1Name,
+      finalT2Name,
+      finalT1Partner,
+      finalT2Partner,
+      initialServer
+    );
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-3">
+      <div className="w-full max-w-lg max-h-[92vh] overflow-y-auto bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl p-5 text-slate-100 flex flex-col gap-4">
+        {/* Header */}
+        <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+              <Settings2 className="w-5 h-5 text-emerald-400" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-white">ตั้งค่าแมตช์การแข่งขันใหม่</h3>
+              <p className="text-xs text-slate-400">เลือกประเภท กฎกติกา และรายชื่อผู้เล่น</p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <form onSubmit={handleStart} className="space-y-4">
+          {/* Singles vs Doubles */}
+          <div>
+            <label className="text-xs font-semibold text-slate-300 block mb-1.5">
+              ประเภทการแข่งขัน:
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setMatchType('singles')}
+                className={`flex items-center justify-center gap-2 py-2 px-3 rounded-xl border text-xs font-bold transition ${
+                  matchType === 'singles'
+                    ? 'bg-emerald-600 border-emerald-400 text-white shadow-md'
+                    : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'
+                }`}
+              >
+                <UserIcon className="w-4 h-4" />
+                <span>ประเภทเดี่ยว (Singles)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setMatchType('doubles')}
+                className={`flex items-center justify-center gap-2 py-2 px-3 rounded-xl border text-xs font-bold transition ${
+                  matchType === 'doubles'
+                    ? 'bg-emerald-600 border-emerald-400 text-white shadow-md'
+                    : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'
+                }`}
+              >
+                <Users className="w-4 h-4" />
+                <span>ประเภทคู่ (Doubles)</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Quick Roster Selector Helper */}
+          {savedRoster.length > 0 && (
+            <div className="bg-slate-950/70 p-2.5 rounded-xl border border-slate-800">
+              <span className="text-[10px] font-bold text-slate-400 block mb-1 flex items-center gap-1">
+                <span>⚡ รายชื่อที่เคยบันทึกไว้ (แตะเพื่อคัดลอกใส่):</span>
+              </span>
+              <div className="flex flex-wrap gap-1 max-h-16 overflow-y-auto">
+                {savedRoster.map((name, i) => (
+                  <span
+                    key={i}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-slate-300 text-[10px] hover:border-emerald-500 hover:text-emerald-300"
+                  >
+                    <span>{name}</span>
+                    <button
+                      type="button"
+                      onClick={() => setT1Name(name)}
+                      className="text-emerald-400 hover:underline font-bold text-[9px] px-1"
+                      title="ใส่ในทีม 1"
+                    >
+                      T1
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setT2Name(name)}
+                      className="text-sky-400 hover:underline font-bold text-[9px] px-1"
+                      title="ใส่ในทีม 2"
+                    >
+                      T2
+                    </button>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Player Names */}
+          <div className="space-y-2">
+            <label className="text-xs font-semibold text-slate-300 block">รายชื่อผู้เล่น:</label>
+
+            {/* Team 1 */}
+            <div className="p-3 bg-slate-950/60 rounded-xl border border-slate-800 space-y-2">
+              <span className="text-[11px] font-bold text-emerald-400 block">
+                {matchType === 'doubles' ? 'ทีม 1 (Team 1)' : 'ผู้เล่น 1 (Player 1)'}
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div>
+                  <input
+                    type="text"
+                    value={t1Name}
+                    onChange={(e) => setT1Name(e.target.value)}
+                    placeholder="ชื่อผู้เล่น 1"
+                    className="w-full px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-xs text-white focus:outline-hidden focus:border-emerald-500"
+                    required
+                  />
+                  {/* Quick Pick row */}
+                  <div className="flex gap-1 overflow-x-auto mt-1 py-0.5 no-scrollbar">
+                    {savedRoster.slice(0, 5).map((r, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => setT1Name(r)}
+                        className="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 hover:bg-emerald-900/60 hover:text-emerald-300 text-slate-400 border border-slate-700/60 shrink-0"
+                      >
+                        {r}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {matchType === 'doubles' && (
+                  <div>
+                    <input
+                      type="text"
+                      value={t1Partner}
+                      onChange={(e) => setT1Partner(e.target.value)}
+                      placeholder="ชื่อผู้เล่นคู่หู 1"
+                      className="w-full px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-xs text-white focus:outline-hidden focus:border-emerald-500"
+                      required
+                    />
+                    <div className="flex gap-1 overflow-x-auto mt-1 py-0.5 no-scrollbar">
+                      {savedRoster.slice(0, 5).map((r, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => setT1Partner(r)}
+                          className="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 hover:bg-emerald-900/60 hover:text-emerald-300 text-slate-400 border border-slate-700/60 shrink-0"
+                        >
+                          {r}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Team 2 */}
+            <div className="p-3 bg-slate-950/60 rounded-xl border border-slate-800 space-y-2">
+              <span className="text-[11px] font-bold text-sky-400 block">
+                {matchType === 'doubles' ? 'ทีม 2 (Team 2)' : 'ผู้เล่น 2 (Player 2)'}
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div>
+                  <input
+                    type="text"
+                    value={t2Name}
+                    onChange={(e) => setT2Name(e.target.value)}
+                    placeholder="ชื่อผู้เล่น 2"
+                    className="w-full px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-xs text-white focus:outline-hidden focus:border-sky-500"
+                    required
+                  />
+                  <div className="flex gap-1 overflow-x-auto mt-1 py-0.5 no-scrollbar">
+                    {savedRoster.slice(0, 5).map((r, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => setT2Name(r)}
+                        className="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 hover:bg-sky-900/60 hover:text-sky-300 text-slate-400 border border-slate-700/60 shrink-0"
+                      >
+                        {r}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {matchType === 'doubles' && (
+                  <div>
+                    <input
+                      type="text"
+                      value={t2Partner}
+                      onChange={(e) => setT2Partner(e.target.value)}
+                      placeholder="ชื่อผู้เล่นคู่หู 2"
+                      className="w-full px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-xs text-white focus:outline-hidden focus:border-sky-500"
+                      required
+                    />
+                    <div className="flex gap-1 overflow-x-auto mt-1 py-0.5 no-scrollbar">
+                      {savedRoster.slice(0, 5).map((r, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => setT2Partner(r)}
+                          className="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 hover:bg-sky-900/60 hover:text-sky-300 text-slate-400 border border-slate-700/60 shrink-0"
+                        >
+                          {r}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Format & Rules Grid */}
+          <div className="grid grid-cols-2 gap-3 text-xs">
+            {/* Match Format */}
+            <div>
+              <label className="font-semibold text-slate-300 block mb-1">จำนวนเซต:</label>
+              <select
+                value={format}
+                onChange={(e) => setFormat(e.target.value as MatchFormat)}
+                className="w-full px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-white focus:outline-hidden focus:border-emerald-500"
+              >
+                <option value="1set">1 เซตจบ (1 Set)</option>
+                <option value="3sets">ชนะ 2 ใน 3 เซต (Best of 3)</option>
+                <option value="5sets">ชนะ 3 ใน 5 เซต (Best of 5)</option>
+                <option value="pro8">โปรเซต 8 เกม (Pro Set 8)</option>
+              </select>
+            </div>
+
+            {/* Deuce rule */}
+            <div>
+              <label className="font-semibold text-slate-300 block mb-1">กฎดิวซ์ (Deuce):</label>
+              <select
+                value={adRule}
+                onChange={(e) => setAdRule(e.target.value as 'advantage' | 'no-ad')}
+                className="w-full px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-white focus:outline-hidden focus:border-emerald-500"
+              >
+                <option value="advantage">Advantage (มีได้เปรียบ)</option>
+                <option value="no-ad">No-Ad (แต้มตัดสินทันที)</option>
+              </select>
+            </div>
+
+            {/* Court surface */}
+            <div>
+              <label className="font-semibold text-slate-300 block mb-1">พื้นผิวคอร์ต:</label>
+              <select
+                value={courtSurface}
+                onChange={(e) => setCourtSurface(e.target.value as any)}
+                className="w-full px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-white focus:outline-hidden focus:border-emerald-500"
+              >
+                <option value="hard">ฮาร์ดคอร์ต (Hard Court)</option>
+                <option value="clay">คอร์ตดิน (Clay Court)</option>
+                <option value="grass">คอร์ตหญ้า (Grass Court)</option>
+              </select>
+            </div>
+
+            {/* Initial Server */}
+            <div>
+              <label className="font-semibold text-slate-300 block mb-1">ผู้เริ่มเสิร์ฟเกมแรก:</label>
+              <select
+                value={initialServer}
+                onChange={(e) => setInitialServer(e.target.value as any)}
+                className="w-full px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-white focus:outline-hidden focus:border-emerald-500"
+              >
+                <option value="team1">{t1Name || 'Player 1'}</option>
+                <option value="team2">{t2Name || 'Player 2'}</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Start Match Button */}
+          <button
+            type="submit"
+            className="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 font-bold text-white text-sm shadow-xl flex items-center justify-center gap-2 active:scale-98 transition mt-2"
+          >
+            <Play className="w-4 h-4 fill-white" />
+            <span>เริ่มนับแต้มแมตช์นี้ (Start Match)</span>
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+};
