@@ -1,7 +1,12 @@
 import React, { useState } from 'react';
 import { MatchFormat, MatchSettings, MatchType, TiebreakFormat } from '../types/tennis';
 import { Users, User as UserIcon, Play, Settings2, X, Trash2 } from 'lucide-react';
-import { getSavedPlayerRoster, saveMultiplePlayersToRoster, removePlayerFromRoster } from '../utils/playerRoster';
+import {
+  getSavedPlayerRoster,
+  saveMultiplePlayersToRoster,
+  removePlayerFromRoster,
+  clearAllSavedRoster,
+} from '../utils/playerRoster';
 
 interface MatchSetupModalProps {
   isOpen: boolean;
@@ -40,6 +45,17 @@ export const MatchSetupModal: React.FC<MatchSetupModalProps> = ({
   const handleDeleteRoster = (name: string) => {
     const updated = removePlayerFromRoster(name);
     setSavedRoster([...updated]);
+    // Clear from form inputs if currently set to the deleted name
+    if (t1Name === name) setT1Name('Player 1');
+    if (t2Name === name) setT2Name('Player 2');
+    if (t1Partner === name) setT1Partner('Partner 1');
+    if (t2Partner === name) setT2Partner('Partner 2');
+  };
+
+  const handleClearAllRoster = () => {
+    const updated = clearAllSavedRoster();
+    setSavedRoster([...updated]);
+    setShowRosterManager(false);
   };
 
   const handleStart = (e: React.FormEvent) => {
@@ -147,9 +163,18 @@ export const MatchSetupModal: React.FC<MatchSetupModalProps> = ({
             {/* Expandable Roster Manager */}
             {showRosterManager && (
               <div className="p-2.5 bg-slate-950 rounded-xl border border-slate-800 max-h-36 overflow-y-auto space-y-1">
-                <span className="text-[10px] font-bold text-slate-400 block mb-1">
-                  รายชื่อที่บันทึกไว้ในระบบ (กดลบเพื่อนำออก):
-                </span>
+                <div className="flex items-center justify-between pb-1 border-b border-slate-800/80 mb-1">
+                  <span className="text-[10px] font-bold text-slate-400">
+                    รายชื่อที่บันทึกไว้ ({savedRoster.length})
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleClearAllRoster}
+                    className="text-[10px] font-bold text-rose-400 hover:text-rose-300 hover:underline"
+                  >
+                    ล้างทั้งหมด (Clear All)
+                  </button>
+                </div>
                 {savedRoster.map((name) => (
                   <div
                     key={name}

@@ -1,7 +1,12 @@
 import React, { useState } from 'react';
 import { MatchState } from '../types/tennis';
 import { UserCheck, X, Check, Edit3, Trash2 } from 'lucide-react';
-import { getSavedPlayerRoster, saveMultiplePlayersToRoster, removePlayerFromRoster } from '../utils/playerRoster';
+import {
+  getSavedPlayerRoster,
+  saveMultiplePlayersToRoster,
+  removePlayerFromRoster,
+  clearAllSavedRoster,
+} from '../utils/playerRoster';
 
 interface EditPlayerModalProps {
   isOpen: boolean;
@@ -39,6 +44,16 @@ export const EditPlayerModal: React.FC<EditPlayerModalProps> = ({
   const handleDeleteRoster = (name: string) => {
     const updated = removePlayerFromRoster(name);
     setSavedRoster([...updated]);
+    if (t1P1 === name) setT1P1('Player 1');
+    if (t1P2 === name) setT1P2('Partner 1');
+    if (t2P1 === name) setT2P1('Player 2');
+    if (t2P2 === name) setT2P2('Partner 2');
+  };
+
+  const handleClearAllRoster = () => {
+    const updated = clearAllSavedRoster();
+    setSavedRoster([...updated]);
+    setShowRosterManager(false);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -238,6 +253,20 @@ export const EditPlayerModal: React.FC<EditPlayerModalProps> = ({
 
             {showRosterManager && (
               <div className="mt-2 pt-2 border-t border-slate-800 max-h-36 overflow-y-auto space-y-1">
+                {savedRoster.length > 0 && (
+                  <div className="flex items-center justify-between pb-1 border-b border-slate-800/80 mb-1">
+                    <span className="text-[10px] font-bold text-slate-400">
+                      รายชื่อทั้งหมด ({savedRoster.length})
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleClearAllRoster}
+                      className="text-[10px] font-bold text-rose-400 hover:text-rose-300 hover:underline"
+                    >
+                      ล้างทั้งหมด (Clear All)
+                    </button>
+                  </div>
+                )}
                 {savedRoster.length === 0 ? (
                   <p className="text-[10px] text-slate-500 text-center py-2">ไม่มีรายชื่อที่บันทึกไว้</p>
                 ) : (
