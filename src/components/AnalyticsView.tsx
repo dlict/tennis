@@ -18,8 +18,101 @@ interface AnalyticsViewProps {
 }
 
 export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ match, onClose }) => {
-  const [activeTab, setActiveTab] = useState<'comparison' | 'court_diagram' | 'momentum' | 'ai_insights'>('comparison');
-  const [diagramFilter, setDiagramFilter] = useState<'all' | 'winner' | 'error' | 'ace'>('all');
+  const [activeTab, setActiveTab] = useState<'comparison' | 'ai_insights'>('comparison');
+  const [selectedPlayerId, setSelectedPlayerId] = useState<string>('all');
+
+  // List of all individual players across both teams
+  const allPlayers = [
+    ...match.team1.players.map((p, idx) => ({
+      id: p.id || `t1_${idx}`,
+      name: p.name,
+      team: 'team1' as const,
+      teamName: match.team1.name,
+      color: 'emerald',
+    })),
+    ...match.team2.players.map((p, idx) => ({
+      id: p.id || `t2_${idx}`,
+      name: p.name,
+      team: 'team2' as const,
+      teamName: match.team2.name,
+      color: 'sky',
+    })),
+  ];
+
+  const selectedPlayer = allPlayers.find((p) => p.id === selectedPlayerId);
+
+  // Calculate individual player statistics
+  const calculatePlayerStats = (player: typeof allPlayers[0]) => {
+    const isDoubles = match.settings.type === 'doubles';
+    const points = match.pointsHistory;
+
+    // Winners by this player
+    const winners = points.filter((pt) => {
+      if (pt.category !== 'winner' && pt.category !== 'ace') return false;
+      if (pt.winnerTeam !== player.team) return false;
+      if (!isDoubles) return true;
+      // In doubles: check if explicitly assigned or if error was by opponent
+      return pt.errorPlayerName !== player.name;
+    });
+
+    // Unforced Errors by this player
+    const errors = points.filter((pt) => {
+      if (pt.category !== 'unforced_error' && pt.category !== 'double_fault') return false;
+      if (!isDoubles) return pt.errorTeam === player.team;
+      return pt.errorPlayerName === player.name || (pt.errorTeam === player.team && !pt.errorPlayerName);
+    });
+
+    // Serves by this player
+    const serves = points.filter((pt) => {
+      if (!isDoubles) return pt.servingTeam === player.team;
+      return pt.servingPlayerId === player.id;
+    });
+
+    const firstServesIn = serves.filter((pt) => !pt.isSecondServe);
+    const firstServesWon = firstServesIn.filter((pt) => pt.winnerTeam === player.team);
+    const secondServes = serves.filter((pt) => pt.isSecondServe);
+    const secondServesWon = secondServes.filter((pt) => pt.winnerTeam === player.team);
+    const aces = serves.filter((pt) => pt.category === 'ace');
+    const doubleFaults = serves.filter((pt) => pt.category === 'double_fault');
+
+    // Strokes breakdown for winners
+    const winnerStrokes = {
+      forehand: winners.filter((p) => p.stroke === 'forehand').length,
+      backhand: winners.filter((p) => p.stroke === 'backhand').length,
+      volley: winners.filter((p) => p.stroke === 'volley').length,
+      smash: winners.filter((p) => p.stroke === 'smash').length,
+      dropShot: winners.filter((p) => p.stroke === 'drop_shot').length,
+      serve: aces.length,
+    };
+
+    // Error details breakdown
+    const errorDetails = {
+      net: errors.filter((p) => p.errorDetail === 'net').length,
+      long: errors.filter((p) => p.errorDetail === 'long').length,
+      wide: errors.filter((p) => p.errorDetail === 'wide').length,
+      forehand: errors.filter((p) => p.errorStroke === 'forehand').length,
+      backhand: errors.filter((p) => p.errorStroke === 'backhand').length,
+      doubleFault: doubleFaults.length,
+    };
+
+    const firstServeInPct = serves.length > 0 ? Math.round((firstServesIn.length / serves.length) * 100) : 0;
+    const firstServeWonPct = firstServesIn.length > 0 ? Math.round((firstServesWon.length / firstServesIn.length) * 100) : 0;
+
+    return {
+      totalWinners: winners.length,
+      totalErrors: errors.length,
+      totalServes: serves.length,
+      firstServeInPct,
+      firstServeWonPct,
+      aces: aces.length,
+      doubleFaults: doubleFaults.length,
+      winnerStrokes,
+      errorDetails,
+      ratio: errors.length > 0 ? (winners.length / errors.length).toFixed(1) : winners.length.toString(),
+    };
+  };
+
+  const playerStats = selectedPlayer ? calculatePlayerStats(selectedPlayer) : null;
 
   const stats = calculateMatchStats(match.pointsHistory, match.sets);
 
@@ -119,14 +212,6 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ match, onClose }) 
     return list;
   };
 
-  // Filtered points for court diagram
-  const filteredPoints = match.pointsHistory.filter((pt) => {
-    if (diagramFilter === 'winner') return pt.category === 'winner';
-    if (diagramFilter === 'error') return pt.category === 'unforced_error' || pt.category === 'double_fault';
-    if (diagramFilter === 'ace') return pt.category === 'ace';
-    return true;
-  });
-
   return (
     <div className="w-full h-full flex flex-col bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden text-slate-100">
       {/* Top Header / Tab Selector */}
@@ -140,9 +225,12 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ match, onClose }) 
 
         <div className="flex items-center gap-1">
           <button
-            onClick={() => setActiveTab('comparison')}
+            onClick={() => {
+              setActiveTab('comparison');
+              setSelectedPlayerId('all');
+            }}
             className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition ${
-              activeTab === 'comparison'
+              selectedPlayerId === 'all' && activeTab === 'comparison'
                 ? 'bg-emerald-600 text-white'
                 : 'bg-slate-800 text-slate-400 hover:text-white'
             }`}
@@ -150,19 +238,12 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ match, onClose }) 
             สถิติเปรียบเทียบ
           </button>
           <button
-            onClick={() => setActiveTab('court_diagram')}
-            className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition ${
-              activeTab === 'court_diagram'
-                ? 'bg-emerald-600 text-white'
-                : 'bg-slate-800 text-slate-400 hover:text-white'
-            }`}
-          >
-            แผนผังคอร์ต & ช็อต
-          </button>
-          <button
-            onClick={() => setActiveTab('ai_insights')}
+            onClick={() => {
+              setActiveTab('ai_insights');
+              setSelectedPlayerId('all');
+            }}
             className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition flex items-center gap-1 ${
-              activeTab === 'ai_insights'
+              selectedPlayerId === 'all' && activeTab === 'ai_insights'
                 ? 'bg-emerald-600 text-white'
                 : 'bg-slate-800 text-slate-400 hover:text-white'
             }`}
@@ -173,18 +254,312 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ match, onClose }) 
           {onClose && (
             <button
               onClick={onClose}
-              className="ml-2 px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-slate-300"
+              className="ml-2 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-300"
             >
-              ปิด
+              ✕ ปิด
             </button>
           )}
         </div>
       </div>
 
+      {/* Player Selector Bar (เลือกดูเป็นรายบุคคล หรือ ดูแบบร่วมทั้งหมด) */}
+      <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-950/80 border-b border-slate-800 shrink-0 overflow-x-auto text-xs">
+        <span className="text-[11px] font-bold text-slate-400 shrink-0 mr-1">เลือกดูข้อมูล:</span>
+        <button
+          onClick={() => setSelectedPlayerId('all')}
+          className={`px-3 py-1 rounded-lg text-xs font-bold transition shrink-0 flex items-center gap-1.5 ${
+            selectedPlayerId === 'all'
+              ? 'bg-emerald-600 text-white shadow-md'
+              : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700'
+          }`}
+        >
+          <BarChart2 className="w-3.5 h-3.5" />
+          <span>ดูแบบร่วมทั้งหมด (Overall)</span>
+        </button>
+
+        {allPlayers.map((player) => (
+          <button
+            key={player.id}
+            onClick={() => setSelectedPlayerId(player.id)}
+            className={`px-3 py-1 rounded-lg text-xs font-bold transition shrink-0 flex items-center gap-1.5 ${
+              selectedPlayerId === player.id
+                ? player.team === 'team1'
+                  ? 'bg-emerald-600 text-white shadow-md'
+                  : 'bg-sky-600 text-white shadow-md'
+                : 'bg-slate-800/80 text-slate-300 hover:bg-slate-700 border border-slate-700/70'
+            }`}
+          >
+            <span>👤</span>
+            <span>{player.name}</span>
+            <span className="text-[10px] opacity-75">({player.teamName})</span>
+          </button>
+        ))}
+      </div>
+
       {/* Main Content Area */}
       <div className="flex-1 overflow-y-auto p-3">
-        {/* TAB 1: Comparison Stats */}
-        {activeTab === 'comparison' && (
+        {/* ================= INDIVIDUAL PLAYER DASHBOARD ================= */}
+        {selectedPlayerId !== 'all' && selectedPlayer && playerStats && (
+          <div className="space-y-3">
+            {/* Player Banner */}
+            <div className={`p-3 rounded-2xl border flex items-center justify-between ${
+              selectedPlayer.team === 'team1'
+                ? 'bg-gradient-to-r from-emerald-950/80 via-slate-900 to-slate-950 border-emerald-700/60'
+                : 'bg-gradient-to-r from-sky-950/80 via-slate-900 to-slate-950 border-sky-700/60'
+            }`}>
+              <div className="flex items-center gap-2.5">
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg font-black shadow-lg ${
+                  selectedPlayer.team === 'team1' ? 'bg-emerald-600 text-white' : 'bg-sky-600 text-white'
+                }`}>
+                  👤
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-black text-white">{selectedPlayer.name}</h3>
+                    <span className={`text-[10px] font-bold px-2 py-0.2 rounded-full border ${
+                      selectedPlayer.team === 'team1'
+                        ? 'bg-emerald-950 border-emerald-500/50 text-emerald-300'
+                        : 'bg-sky-950 border-sky-500/50 text-sky-300'
+                    }`}>
+                      {selectedPlayer.teamName}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    สถิติการเล่นเฉพาะบุคคล • อัตราส่วนบุกได้แต้ม (Winner/UE): <strong className="text-white">{playerStats.ratio}x</strong>
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <span className="bg-slate-900/90 border border-slate-700 text-slate-200 px-2.5 py-1 rounded-xl text-xs font-bold">
+                  {playerStats.totalWinners} วินเนอร์
+                </span>
+                <span className="bg-slate-900/90 border border-slate-700 text-rose-300 px-2.5 py-1 rounded-xl text-xs font-bold">
+                  {playerStats.totalErrors} ตีเสีย
+                </span>
+              </div>
+            </div>
+
+            {/* 4 Stat Cards Grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {/* Card 1: Winners */}
+              <div className="p-2.5 bg-slate-950/60 rounded-xl border border-emerald-900/50">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[11px] text-emerald-400 font-bold flex items-center gap-1">
+                    <Flame className="w-3.5 h-3.5" /> วินเนอร์ที่ทำได้
+                  </span>
+                  <span className="text-base font-black text-emerald-300">{playerStats.totalWinners}</span>
+                </div>
+                <div className="text-[10px] text-slate-400 space-y-0.5">
+                  <div className="flex justify-between">
+                    <span>Forehand:</span> <span className="font-bold text-slate-200">{playerStats.winnerStrokes.forehand}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Backhand:</span> <span className="font-bold text-slate-200">{playerStats.winnerStrokes.backhand}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Volley/หน้าเน็ต:</span> <span className="font-bold text-slate-200">{playerStats.winnerStrokes.volley}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Smash/ตบ:</span> <span className="font-bold text-slate-200">{playerStats.winnerStrokes.smash}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Card 2: Errors */}
+              <div className="p-2.5 bg-slate-950/60 rounded-xl border border-rose-900/50">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[11px] text-rose-400 font-bold flex items-center gap-1">
+                    <AlertTriangle className="w-3.5 h-3.5" /> ตีเสียเอง (UE)
+                  </span>
+                  <span className="text-base font-black text-rose-300">{playerStats.totalErrors}</span>
+                </div>
+                <div className="text-[10px] text-slate-400 space-y-0.5">
+                  <div className="flex justify-between">
+                    <span>ติดเน็ต:</span> <span className="font-bold text-slate-200">{playerStats.errorDetails.net}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>ออกยาว (Long):</span> <span className="font-bold text-slate-200">{playerStats.errorDetails.long}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>ออกข้าง (Wide):</span> <span className="font-bold text-slate-200">{playerStats.errorDetails.wide}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>FH/BH เสีย:</span> <span className="font-bold text-slate-200">{playerStats.errorDetails.forehand + playerStats.errorDetails.backhand}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Card 3: Serve Stats */}
+              <div className="p-2.5 bg-slate-950/60 rounded-xl border border-amber-900/50">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[11px] text-amber-400 font-bold flex items-center gap-1">
+                    <Zap className="w-3.5 h-3.5" /> สถิติเกมเสิร์ฟ
+                  </span>
+                  <span className="text-base font-black text-amber-300">{playerStats.firstServeInPct}%</span>
+                </div>
+                <div className="text-[10px] text-slate-400 space-y-0.5">
+                  <div className="flex justify-between">
+                    <span>เสิร์ฟแรกเข้า:</span> <span className="font-bold text-slate-200">{playerStats.firstServeInPct}%</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>แต้มจากเสิร์ฟแรก:</span> <span className="font-bold text-slate-200">{playerStats.firstServeWonPct}%</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>เสิร์ฟเอซ:</span> <span className="font-bold text-amber-300">{playerStats.aces}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>ดับเบิ้ลฟอลต์:</span> <span className="font-bold text-rose-300">{playerStats.doubleFaults}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Card 4: Aggression & Rating */}
+              <div className="p-2.5 bg-slate-950/60 rounded-xl border border-indigo-900/50">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[11px] text-indigo-400 font-bold flex items-center gap-1">
+                    <Target className="w-3.5 h-3.5" /> อัตราบุกสำเร็จ
+                  </span>
+                  <span className="text-base font-black text-indigo-300">{playerStats.ratio}x</span>
+                </div>
+                <div className="text-[10px] text-slate-400 space-y-0.5">
+                  <div className="flex justify-between">
+                    <span>แต้มบุกรวม:</span> <span className="font-bold text-slate-200">{playerStats.totalWinners + playerStats.aces}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>ความสม่ำเสมอ:</span> <span className="font-bold text-emerald-300">{playerStats.totalErrors <= 3 ? 'สูงมาก' : playerStats.totalErrors <= 8 ? 'ปานกลาง' : 'ควรลดลูกเสีย'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>สไตล์การเล่น:</span> <span className="font-bold text-slate-200">{playerStats.totalWinners > playerStats.totalErrors ? 'เกมบุกดุดัน' : 'เน้นความเหนียวแน่น'}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Visual Shot Distribution Chart for this Player */}
+            <div className="p-3 bg-slate-950/70 rounded-xl border border-slate-800">
+              <h4 className="text-xs font-bold text-slate-200 mb-2 flex items-center gap-1.5">
+                <BarChart2 className="w-3.5 h-3.5 text-sky-400" />
+                <span>การกระจายช็อตของ {selectedPlayer.name} (Shot Breakdown & Comparison)</span>
+              </h4>
+
+              <div className="space-y-2 text-xs">
+                {/* Forehand Comparison */}
+                <div>
+                  <div className="flex justify-between text-[11px] mb-1">
+                    <span className="text-slate-300">โฟร์แฮนด์ (Forehand):</span>
+                    <span>
+                      <strong className="text-emerald-400">{playerStats.winnerStrokes.forehand} วินเนอร์</strong> vs{' '}
+                      <strong className="text-rose-400">{playerStats.errorDetails.forehand} เออเร่อร์</strong>
+                    </span>
+                  </div>
+                  <div className="flex h-2 rounded-full overflow-hidden bg-slate-800">
+                    <div
+                      className="bg-emerald-500"
+                      style={{
+                        width: `${
+                          (playerStats.winnerStrokes.forehand + playerStats.errorDetails.forehand) > 0
+                            ? (playerStats.winnerStrokes.forehand / (playerStats.winnerStrokes.forehand + playerStats.errorDetails.forehand)) * 100
+                            : 50
+                        }%`,
+                      }}
+                    />
+                    <div
+                      className="bg-rose-500"
+                      style={{
+                        width: `${
+                          (playerStats.winnerStrokes.forehand + playerStats.errorDetails.forehand) > 0
+                            ? (playerStats.errorDetails.forehand / (playerStats.winnerStrokes.forehand + playerStats.errorDetails.forehand)) * 100
+                            : 50
+                        }%`,
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* Backhand Comparison */}
+                <div>
+                  <div className="flex justify-between text-[11px] mb-1">
+                    <span className="text-slate-300">แบ็คแฮนด์ (Backhand):</span>
+                    <span>
+                      <strong className="text-emerald-400">{playerStats.winnerStrokes.backhand} วินเนอร์</strong> vs{' '}
+                      <strong className="text-rose-400">{playerStats.errorDetails.backhand} เออเร่อร์</strong>
+                    </span>
+                  </div>
+                  <div className="flex h-2 rounded-full overflow-hidden bg-slate-800">
+                    <div
+                      className="bg-emerald-500"
+                      style={{
+                        width: `${
+                          (playerStats.winnerStrokes.backhand + playerStats.errorDetails.backhand) > 0
+                            ? (playerStats.winnerStrokes.backhand / (playerStats.winnerStrokes.backhand + playerStats.errorDetails.backhand)) * 100
+                            : 50
+                        }%`,
+                      }}
+                    />
+                    <div
+                      className="bg-rose-500"
+                      style={{
+                        width: `${
+                          (playerStats.winnerStrokes.backhand + playerStats.errorDetails.backhand) > 0
+                            ? (playerStats.errorDetails.backhand / (playerStats.winnerStrokes.backhand + playerStats.errorDetails.backhand)) * 100
+                            : 50
+                        }%`,
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* Net play */}
+                <div>
+                  <div className="flex justify-between text-[11px] mb-1">
+                    <span className="text-slate-300">การเล่นหน้าเน็ต (Volley / Smash):</span>
+                    <span>
+                      <strong className="text-emerald-400">{playerStats.winnerStrokes.volley + playerStats.winnerStrokes.smash} วินเนอร์</strong>
+                    </span>
+                  </div>
+                  <div className="flex h-2 rounded-full overflow-hidden bg-slate-800">
+                    <div
+                      className="bg-emerald-400"
+                      style={{
+                        width: `${Math.min(100, (playerStats.winnerStrokes.volley + playerStats.winnerStrokes.smash) * 20)}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Individual Coaching Insight */}
+            <div className="p-3 bg-gradient-to-r from-slate-900 to-slate-950 rounded-xl border border-slate-800 space-y-1.5">
+              <div className="flex items-center gap-1.5 text-xs font-bold text-amber-300">
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>คำแนะนำการเล่นเฉพาะตัวสำหรับ {selectedPlayer.name}</span>
+              </div>
+              <ul className="text-xs text-slate-300 space-y-1 list-disc list-inside">
+                {playerStats.winnerStrokes.forehand > playerStats.winnerStrokes.backhand && (
+                  <li>อาวุธหลักคือ <strong>โฟร์แฮนด์</strong> ที่ทำวินเนอร์ได้ถึง {playerStats.winnerStrokes.forehand} แต้ม ควรหาจังหวะวิ่งอ้อมตี Inside-out บ่อยขึ้น</li>
+                )}
+                {playerStats.errorDetails.net > playerStats.errorDetails.long && (
+                  <li>ลูกเสียส่วนใหญ่มัก <strong>ติดเน็ต ({playerStats.errorDetails.net} ครั้ง)</strong> แนะนำให้เพิ่มความสูงของวงสวิงผ่านเหนือเน็ต 1-2 ฟุต</li>
+                )}
+                {playerStats.errorDetails.long > playerStats.errorDetails.net && (
+                  <li>ลูกเสียส่วนใหญ่มัก <strong>ออกหลัง ({playerStats.errorDetails.long} ครั้ง)</strong> ควรปั่น Topspin ให้ลูกฮุกลงท้ายคอร์ตมากขึ้น</li>
+                )}
+                {playerStats.firstServeInPct > 65 && (
+                  <li>เปอร์เซ็นต์เสิร์ฟแรกเข้ายอดเยี่ยม ({playerStats.firstServeInPct}%) รักษาจังหวะการโยนบอลนี้ไว้เพื่อกดดันคู่ต่อสู้</li>
+                )}
+                {playerStats.firstServeInPct <= 50 && playerStats.totalServes > 0 && (
+                  <li>เสิร์ฟแรกเข้า {playerStats.firstServeInPct}% ควรเน้นความแน่นอนมากกว่าความเร็ว เพื่อหลีกเลี่ยงการเปิดโอกาสให้คู่แข่งบุกเสิร์ฟสอง</li>
+                )}
+                <li>สถิติรวม: ช่วยทีมเก็บ {playerStats.totalWinners} วินเนอร์ และ {playerStats.aces} เอซ</li>
+              </ul>
+            </div>
+          </div>
+        )}
+
+        {/* ================= OVERALL TEAM STATS (ดูแบบร่วมทั้งหมด) ================= */}
+        {selectedPlayerId === 'all' && activeTab === 'comparison' && (
           <div className="space-y-3">
             {/* Player Head-to-Head Header */}
             <div className="grid grid-cols-3 items-center text-center py-2 px-3 bg-slate-950/70 rounded-xl border border-slate-800">
@@ -317,128 +692,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ match, onClose }) 
           </div>
         )}
 
-        {/* TAB 2: Court Diagram with Shot Distribution */}
-        {activeTab === 'court_diagram' && (
-          <div className="space-y-3">
-            {/* Filter buttons */}
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-slate-400 font-medium">
-                แสดงผลจุดช็อตสำคัญ ({filteredPoints.length} แต้ม)
-              </span>
-              <div className="flex gap-1">
-                {(['all', 'winner', 'error', 'ace'] as const).map((filter) => (
-                  <button
-                    key={filter}
-                    onClick={() => setDiagramFilter(filter)}
-                    className={`px-2 py-0.5 rounded text-[11px] font-semibold border transition ${
-                      diagramFilter === filter
-                        ? 'bg-slate-100 text-slate-900 border-white'
-                        : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
-                    }`}
-                  >
-                    {filter === 'all'
-                      ? 'ทั้งหมด'
-                      : filter === 'winner'
-                      ? 'วินเนอร์'
-                      : filter === 'error'
-                      ? 'ตีเสีย'
-                      : 'เอซ'}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* High-Fidelity 2D Court Diagram */}
-            <div className="relative w-full aspect-[2.1/1] bg-emerald-950 rounded-xl border-2 border-slate-400/90 shadow-2xl overflow-hidden p-2">
-              {/* Lines */}
-              <div className="absolute top-[16%] left-0 right-0 h-[1.5px] bg-white/70" />
-              <div className="absolute bottom-[16%] left-0 right-0 h-[1.5px] bg-white/70" />
-              <div className="absolute top-[16%] bottom-[16%] left-[28%] w-[1.5px] bg-white/70" />
-              <div className="absolute top-[16%] bottom-[16%] right-[28%] w-[1.5px] bg-white/70" />
-              <div className="absolute top-[50%] left-[28%] right-[28%] h-[1.5px] bg-white/70" />
-              <div className="absolute top-0 bottom-0 left-[50%] w-[3px] bg-white z-10 shadow" />
-
-              {/* Point Plots Distributed Across Court */}
-              {filteredPoints.map((pt, index) => {
-                const isT1 = pt.winnerTeam === 'team1';
-                // Deterministic placement on court based on point number and category
-                const seedX = ((pt.pointNumberInMatch * 37) % 80) / 100;
-                const seedY = ((pt.pointNumberInMatch * 53) % 70 + 15) / 100;
-
-                let posX = 0;
-                if (pt.category === 'ace') {
-                  // Inside service box
-                  posX = isT1 ? 0.35 + (seedX % 0.12) : 0.53 + (seedX % 0.12);
-                } else if (pt.stroke === 'volley' || pt.stroke === 'smash') {
-                  // Near net
-                  posX = isT1 ? 0.42 + (seedX % 0.06) : 0.52 + (seedX % 0.06);
-                } else if (pt.category === 'unforced_error' && pt.errorDetail === 'net') {
-                  // Net line
-                  posX = 0.5;
-                } else {
-                  // Baseline or deep
-                  posX = isT1 ? 0.72 + (seedX % 0.22) : 0.06 + (seedX % 0.22);
-                }
-
-                const posY = seedY;
-
-                let icon = '•';
-                let colorClass = 'bg-emerald-400 text-slate-950';
-                if (pt.category === 'ace') {
-                  colorClass = 'bg-amber-400 text-slate-950';
-                  icon = '⚡';
-                } else if (pt.category === 'winner') {
-                  colorClass = isT1 ? 'bg-emerald-500 text-white' : 'bg-sky-400 text-slate-950';
-                  icon = '★';
-                } else if (pt.category === 'unforced_error' || pt.category === 'double_fault') {
-                  colorClass = 'bg-rose-500 text-white';
-                  icon = '✕';
-                }
-
-                return (
-                  <div
-                    key={pt.id || index}
-                    style={{ left: `${posX * 100}%`, top: `${posY * 100}%` }}
-                    className={`absolute -translate-x-1/2 -translate-y-1/2 w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-black shadow-md ${colorClass} hover:scale-150 transition-transform cursor-pointer`}
-                    title={`แต้มที่ ${pt.pointNumberInMatch}: ${pt.category} (${match[pt.winnerTeam].name})`}
-                  >
-                    {icon}
-                  </div>
-                );
-              })}
-
-              {/* Court Labels */}
-              <div className="absolute bottom-2 left-3 text-[10px] font-bold text-white/60">
-                ฝั่ง {match.team1.name}
-              </div>
-              <div className="absolute bottom-2 right-3 text-[10px] font-bold text-white/60">
-                ฝั่ง {match.team2.name}
-              </div>
-            </div>
-
-            {/* Legend */}
-            <div className="flex flex-wrap items-center justify-center gap-4 text-xs text-slate-300 bg-slate-950/40 p-2 rounded-xl">
-              <span className="flex items-center gap-1.5">
-                <span className="w-3.5 h-3.5 rounded-full bg-emerald-500 text-white flex items-center justify-center text-[9px] font-bold">★</span>
-                <span>วินเนอร์ ({match.team1.name})</span>
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="w-3.5 h-3.5 rounded-full bg-sky-400 text-slate-950 flex items-center justify-center text-[9px] font-bold">★</span>
-                <span>วินเนอร์ ({match.team2.name})</span>
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="w-3.5 h-3.5 rounded-full bg-amber-400 text-slate-950 flex items-center justify-center text-[9px] font-bold">⚡</span>
-                <span>เอซ (Ace)</span>
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="w-3.5 h-3.5 rounded-full bg-rose-500 text-white flex items-center justify-center text-[9px] font-bold">✕</span>
-                <span>อันฟอร์ซเออเร่อร์</span>
-              </span>
-            </div>
-          </div>
-        )}
-
-        {/* TAB 3: Tactical AI & Performance Insights */}
+        {/* TAB 2: Tactical AI & Performance Insights */}
         {activeTab === 'ai_insights' && (
           <div className="space-y-3">
             <div className="p-3 bg-gradient-to-r from-emerald-950/80 to-slate-900 border border-emerald-700/50 rounded-xl">

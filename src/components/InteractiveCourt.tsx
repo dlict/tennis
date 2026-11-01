@@ -1,7 +1,6 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { MatchState } from '../types/tennis';
-import { getCurrentServeCourt, detectPointContext } from '../utils/tennisEngine';
-import { Zap, Trophy, Target, ArrowLeftRight, Flame } from 'lucide-react';
+import { getCurrentServeCourt } from '../utils/tennisEngine';
 
 interface InteractiveCourtProps {
   match: MatchState;
@@ -14,23 +13,26 @@ export const InteractiveCourt: React.FC<InteractiveCourtProps> = ({
   onZoneSelect,
   selectedZone,
 }) => {
-  const [isFlipped, setIsFlipped] = useState(false);
   const { currentGame, currentServerTeam, sets, currentSetIndex } = match;
   const currentSet = sets[currentSetIndex];
   const serveCourt = getCurrentServeCourt(currentGame);
-  const pointContext = detectPointContext(match);
 
   // Total games played in current set determines side change (after odd games sum: 1, 3, 5...)
   const totalGamesInSet = currentSet ? currentSet.team1Games + currentSet.team2Games : 0;
   const isOddGamesSum = totalGamesInSet % 2 === 1;
 
+  // Ends swap automatically when games sum in current set is odd
+  // Even games: Team 1 is Left, Team 2 is Right
+  // Odd games: Team 2 is Left, Team 1 is Right
+  const isTeam1Left = !isOddGamesSum;
   const isServerT1 = currentServerTeam === 'team1';
+  const isServerOnLeft = isServerT1 ? isTeam1Left : !isTeam1Left;
 
-  // Court perspective: Team 1 usually left, Team 2 usually right, unless flipped by umpire
-  const effectiveServerLeft = (!isFlipped && isServerT1) || (isFlipped && !isServerT1);
-
-  // Highlight service box
-  const targetBox = effectiveServerLeft
+  // Highlight active target service box on the opponent's side
+  // If server is on the left, ball is served to right side
+  // Deuce court (right side from server's perspective):
+  // When serving from left: deuce court is bottom box on right (from umpire view) or top depending on perspective
+  const targetBox = isServerOnLeft
     ? serveCourt === 'deuce'
       ? 'box-t2-top'
       : 'box-t2-bottom'
@@ -39,61 +41,25 @@ export const InteractiveCourt: React.FC<InteractiveCourtProps> = ({
     : 'box-t1-top';
 
   return (
-    <div className="relative w-full h-full flex flex-col items-center justify-center p-1 select-none">
-      {/* 1. CRITICAL POINT ANNOUNCEMENT BANNER (Break Point, Set Point, Match Point, Deciding Point) */}
-      {pointContext.badgeLabel && (
-        <div
-          className={`w-full mb-1 py-1 px-2 rounded-lg border text-center font-black text-[11px] sm:text-xs flex items-center justify-center gap-1.5 shadow-xl animate-pulse transition-all ${
-            pointContext.badgeType === 'match'
-              ? 'bg-gradient-to-r from-yellow-500 via-amber-400 to-yellow-500 text-slate-950 border-amber-300 shadow-amber-500/50'
-              : pointContext.badgeType === 'set'
-              ? 'bg-gradient-to-r from-purple-600 via-pink-600 to-purple-600 text-white border-pink-300 shadow-pink-500/40'
-              : pointContext.badgeType === 'break' || pointContext.badgeType === 'deciding'
-              ? 'bg-gradient-to-r from-red-600 via-rose-600 to-red-600 text-white border-red-300 shadow-red-600/60 ring-2 ring-red-400/40'
-              : 'bg-emerald-600 text-white border-emerald-400'
-          }`}
-        >
-          {pointContext.badgeType === 'match' && <Trophy className="w-3.5 h-3.5 text-slate-950 shrink-0" />}
-          {pointContext.badgeType === 'set' && <Target className="w-3.5 h-3.5 text-white shrink-0" />}
-          {(pointContext.badgeType === 'break' || pointContext.badgeType === 'deciding') && (
-            <Zap className="w-3.5 h-3.5 text-yellow-300 fill-yellow-300 shrink-0" />
-          )}
-          {pointContext.badgeType === 'game' && <Flame className="w-3.5 h-3.5 text-white shrink-0" />}
-          <span className="tracking-wide uppercase drop-shadow-xs">{pointContext.badgeLabel}</span>
-        </div>
-      )}
-
-      {/* 2. Court Header & Quick Tools */}
+    <div className="relative w-full h-full flex flex-col justify-center p-0.5 select-none">
+      {/* Court Status Bar */}
       <div className="flex items-center justify-between w-full px-2 mb-1 text-[11px] font-semibold text-slate-300">
         <div className="flex items-center gap-1.5">
           <span className="flex items-center gap-1">
-            <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="inline-block w-2 h-2 rounded-full bg-emerald-400" />
             {match.settings.type === 'doubles' ? 'คอร์ตคู่ (Doubles)' : 'คอร์ตเดี่ยว (Singles)'}
           </span>
-          {isOddGamesSum && (
-            <span className="text-[10px] bg-indigo-950/80 text-indigo-300 border border-indigo-700/60 px-1.5 py-0.2 rounded font-medium">
-              สลับแดน
-            </span>
-          )}
         </div>
 
         <div className="flex items-center gap-1">
-          <span className="text-amber-300 bg-amber-950/60 border border-amber-800/50 px-1.5 py-0.5 rounded text-[10px]">
+          <span className="text-amber-300 bg-amber-950/60 border border-amber-800/50 px-2 py-0.5 rounded text-[10px] font-bold">
             {serveCourt === 'deuce' ? 'เสิร์ฟคอร์ตขวา (Deuce)' : 'เสิร์ฟคอร์ตซ้าย (Ad)'}
           </span>
-          <button
-            onClick={() => setIsFlipped(!isFlipped)}
-            className="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-[10px] flex items-center gap-1"
-            title="สลับฝั่งมุมมองคอร์ต ซ้าย-ขวา"
-          >
-            <ArrowLeftRight className="w-3 h-3 text-cyan-400" />
-            <span>สลับฝั่ง</span>
-          </button>
         </div>
       </div>
 
       {/* 2D Landscape Court Canvas */}
-      <div className="relative w-full aspect-[2.1/1] max-h-[170px] bg-emerald-900/90 rounded-lg border-2 border-slate-300/80 shadow-inner overflow-hidden">
+      <div className="relative w-full aspect-[2.1/1] max-h-[200px] bg-emerald-900/90 rounded-lg border-2 border-slate-300/80 shadow-inner overflow-hidden my-auto">
         {/* Clay/Hard/Grass subtle background texture */}
         <div
           className={`absolute inset-0 opacity-25 pointer-events-none ${
@@ -241,12 +207,12 @@ export const InteractiveCourt: React.FC<InteractiveCourtProps> = ({
           </div>
         )}
 
-        {/* Team Labels on Baseline */}
+        {/* Team Labels on Baseline (swap when isOddGamesSum is true) */}
         <div className="absolute bottom-1 left-2 text-[9px] font-extrabold text-white/70 tracking-wide pointer-events-none">
-          {match.team1.name.toUpperCase()}
+          {isTeam1Left ? match.team1.name.toUpperCase() : match.team2.name.toUpperCase()}
         </div>
         <div className="absolute bottom-1 right-2 text-[9px] font-extrabold text-white/70 tracking-wide pointer-events-none">
-          {match.team2.name.toUpperCase()}
+          {isTeam1Left ? match.team2.name.toUpperCase() : match.team1.name.toUpperCase()}
         </div>
       </div>
     </div>

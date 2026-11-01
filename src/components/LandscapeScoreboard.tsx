@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { MatchState, ShotCategory, StrokeType, ErrorDetail } from '../types/tennis';
-import { detectPointContext } from '../utils/tennisEngine';
+import { detectPointContext, getCurrentServeCourt } from '../utils/tennisEngine';
 import { InteractiveCourt } from './InteractiveCourt';
 import { PWAInstallButton } from './PWAInstallButton';
 import {
@@ -17,8 +17,8 @@ import {
   Edit3,
   UserCheck,
   AlertOctagon,
-  History,
-  Timer,
+  Trophy,
+  Target,
 } from 'lucide-react';
 
 interface LandscapeScoreboardProps {
@@ -45,7 +45,7 @@ interface LandscapeScoreboardProps {
   onOpenInfographic: () => void;
   onOpenSheetsSync: () => void;
   onOpenSettings: () => void;
-  onOpenPointHistory?: () => void;
+  onResetMatch: () => void;
   isOnline: boolean;
   activeSheetUrl: string | null;
   pendingSyncCount: number;
@@ -65,11 +65,12 @@ export const LandscapeScoreboard: React.FC<LandscapeScoreboardProps> = ({
   onOpenInfographic,
   onOpenSheetsSync,
   onOpenSettings,
-  onOpenPointHistory,
+  onResetMatch,
   isOnline,
   activeSheetUrl,
   pendingSyncCount,
 }) => {
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
   const { team1, team2, sets, currentSetIndex, currentGame, currentServerTeam, isFirstServeFault } =
     match;
 
@@ -79,28 +80,7 @@ export const LandscapeScoreboard: React.FC<LandscapeScoreboardProps> = ({
   const isServerT1 = currentServerTeam === 'team1';
   const isServerT2 = currentServerTeam === 'team2';
 
-  // 25-second Serve Shot Clock
-  const [serveClock, setServeClock] = useState<number>(25);
-  const [isClockRunning, setIsClockRunning] = useState<boolean>(false);
 
-  useEffect(() => {
-    let timerId: any = null;
-    if (isClockRunning && serveClock > 0) {
-      timerId = setInterval(() => {
-        setServeClock((prev) => (prev > 0 ? prev - 1 : 0));
-      }, 1000);
-    } else if (serveClock === 0) {
-      setIsClockRunning(false);
-    }
-    return () => {
-      if (timerId) clearInterval(timerId);
-    };
-  }, [isClockRunning, serveClock]);
-
-  const handleResetClock = () => {
-    setServeClock(25);
-    setIsClockRunning(true);
-  };
 
   // Total games played in set
   const totalGamesInSet = currentSet.team1Games + currentSet.team2Games;
@@ -109,6 +89,11 @@ export const LandscapeScoreboard: React.FC<LandscapeScoreboardProps> = ({
     totalGamesInSet % 2 === 1 &&
     currentGame.team1Points === 0 &&
     currentGame.team2Points === 0;
+
+  const serveCourt = getCurrentServeCourt(currentGame);
+  const serverPlayerName = isServerT1
+    ? match.team1.players[match.currentServerPlayerIndex]?.name || match.team1.name
+    : match.team2.players[match.currentServerPlayerIndex]?.name || match.team2.name;
 
   return (
     <div className="h-screen w-screen flex flex-col bg-slate-950 text-slate-100 overflow-hidden select-none">
@@ -178,18 +163,8 @@ export const LandscapeScoreboard: React.FC<LandscapeScoreboardProps> = ({
           })}
         </div>
 
-        {/* Right: Actions, Edit Players, Sheets Sync */}
+        {/* Right: Actions, Sheets Sync, Infographic, Analytics, PWA, Reset, Settings */}
         <div className="flex items-center gap-1.5">
-          {/* Edit Players / Server Selector */}
-          <button
-            onClick={onOpenEditPlayers}
-            className="flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-[11px] font-semibold transition"
-            title="แก้ไขชื่อผู้เข้าแข่งขัน & กำหนดผู้เสิร์ฟ"
-          >
-            <Edit3 className="w-3.5 h-3.5 text-yellow-400" />
-            <span className="hidden sm:inline">ชื่อ/คนเสิร์ฟ</span>
-          </button>
-
           {/* Sheets Live Sync Badge */}
           <button
             onClick={onOpenSheetsSync}
@@ -235,6 +210,16 @@ export const LandscapeScoreboard: React.FC<LandscapeScoreboardProps> = ({
 
           {/* PWA Install Button */}
           <PWAInstallButton />
+
+          {/* Reset / Start New Match Button */}
+          <button
+            onClick={() => setShowResetConfirm(true)}
+            className="flex items-center gap-1 px-2 py-1 rounded-lg bg-rose-950/40 hover:bg-rose-900/60 border border-rose-700/60 text-rose-300 text-[11px] font-semibold transition active:scale-95"
+            title="รีเซ็ตคะแนน / เริ่มเกมใหม่"
+          >
+            <RotateCcw className="w-3.5 h-3.5 text-rose-400" />
+            <span className="hidden sm:inline">เริ่มใหม่</span>
+          </button>
 
           {/* Settings */}
           <button
@@ -284,8 +269,32 @@ export const LandscapeScoreboard: React.FC<LandscapeScoreboardProps> = ({
             </div>
           </div>
 
-          {/* Giant Score Display */}
+          {/* Giant Score Display with Prominent Serving Badge on Head of Score */}
           <div className="my-auto py-1 text-center flex flex-col items-center justify-center">
+            {/* Server Badge on Head of Score (โชว์บนหัวคะแนนให้เห็นชัดๆ) */}
+            <div className="w-full mb-1 flex items-center justify-center">
+              {isServerT1 ? (
+                <button
+                  type="button"
+                  onClick={onToggleServer}
+                  className="px-3 py-1 rounded-full bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-black text-xs sm:text-sm flex items-center justify-center gap-1.5 shadow-lg shadow-yellow-500/40 border border-yellow-200 transition active:scale-95 animate-pulse"
+                  title="คลิกเพื่อสลับคนเสิร์ฟ"
+                >
+                  <span className="text-sm">🎾</span>
+                  <span className="truncate">{serverPlayerName} เสิร์ฟ ({isFirstServeFault ? 'เสิร์ฟ 2' : 'เสิร์ฟ 1'})</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={onToggleServer}
+                  className="px-2.5 py-0.5 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 text-[11px] font-bold border border-slate-700/80 transition active:scale-95"
+                  title="คลิกเพื่อสลับให้ฝ่ายนี้เสิร์ฟ"
+                >
+                  <span>🛡️ ฝ่ายรับเสิร์ฟ</span>
+                </button>
+              )}
+            </div>
+
             <div
               className={`font-mono text-5xl sm:text-6xl font-black tracking-tight drop-shadow-md ${
                 currentGame.team1Display === 'AD' ? 'text-amber-300 scale-105' : 'text-white'
@@ -357,97 +366,210 @@ export const LandscapeScoreboard: React.FC<LandscapeScoreboardProps> = ({
           </div>
         </div>
 
-        {/* ================= CENTER: COURT & REFEREE SERVE DOCK (Col 5-8) ================= */}
-        <div className="col-span-4 h-full flex flex-col justify-between rounded-2xl bg-slate-900/70 border border-slate-800 p-1.5 overflow-hidden">
-          {/* Interactive Court Component */}
-          <div className="flex-1 flex flex-col justify-center min-h-0">
+        {/* ================= CENTER: COURT & REFEREE DOCK (Col 5-8) ================= */}
+        {/* แบ่งเป็น 3 ส่วน: บน (แจ้งเฉพาะข้อความสำคัญ), กลาง (แสดงคอร์ตเต็มตา), ล่าง (ปุ่มกดง่าย 2 แถว) */}
+        <div className="col-span-4 h-full flex flex-col justify-between rounded-2xl bg-slate-900/90 border border-slate-800 p-2 overflow-hidden shadow-xl gap-1.5">
+
+          {/* 1. ส่วนบน: เอาไว้แจ้งข้อความสำคัญต่างๆ (แสดงเฉพาะเมื่อมีเหตุการณ์สำคัญ เช่น จะโดนเบรค, แมตพ้อย, เซ็ตพ้อย, จบเกม) */}
+          {(pointContext.badgeType === 'match' ||
+            pointContext.badgeType === 'set' ||
+            pointContext.badgeType === 'break' ||
+            pointContext.badgeType === 'deciding' ||
+            match.isFinished ||
+            isFirstServeFault ||
+            (currentGame.team1Points === 0 && currentGame.team2Points === 0 && totalGamesInSet > 0)) && (
+            <div className="shrink-0 h-11 sm:h-12 w-full flex items-center justify-center">
+              {pointContext.badgeType === 'match' ? (
+                <div className="w-full h-full py-1 px-3 rounded-xl bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 text-slate-950 flex items-center justify-between shadow-lg shadow-amber-500/30 border border-amber-300 animate-pulse">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="w-7 h-7 rounded-lg bg-slate-950/20 flex items-center justify-center shrink-0">
+                      <Trophy className="w-4 h-4 text-slate-950" />
+                    </div>
+                    <div className="text-left min-w-0">
+                      <div className="text-xs font-black uppercase tracking-wider truncate">
+                        🏆 MATCH POINT (แมตพ้อย!)
+                      </div>
+                      <div className="text-[10px] sm:text-[11px] font-bold text-slate-900 truncate">
+                        {pointContext.pointHolderName} แต้มตัดสินแชมป์ มีโอกาสปิดแมตช์!
+                      </div>
+                    </div>
+                  </div>
+                  <span className="text-[10px] bg-slate-950 text-amber-300 font-black px-2 py-0.5 rounded-md shrink-0 ml-1.5 shadow">
+                    แมตพ้อย
+                  </span>
+                </div>
+              ) : pointContext.badgeType === 'set' ? (
+                <div className="w-full h-full py-1 px-3 rounded-xl bg-gradient-to-r from-purple-600 via-pink-600 to-purple-600 text-white flex items-center justify-between shadow-lg shadow-pink-500/30 border border-pink-400 animate-pulse">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="w-7 h-7 rounded-lg bg-black/20 flex items-center justify-center shrink-0">
+                      <Target className="w-4 h-4 text-white" />
+                    </div>
+                    <div className="text-left min-w-0">
+                      <div className="text-xs font-black uppercase tracking-wider truncate">
+                        🎯 SET POINT (เซ็ตพ้อย!)
+                      </div>
+                      <div className="text-[10px] sm:text-[11px] font-medium text-pink-100 truncate">
+                        {pointContext.pointHolderName} แต้มตัดสินเซตที่ {currentSetIndex + 1}!
+                      </div>
+                    </div>
+                  </div>
+                  <span className="text-[10px] bg-slate-950 text-pink-300 font-black px-2 py-0.5 rounded-md shrink-0 ml-1.5 shadow">
+                    เซ็ตพ้อย
+                  </span>
+                </div>
+              ) : pointContext.badgeType === 'break' ? (
+                <div className="w-full h-full py-1 px-3 rounded-xl bg-gradient-to-r from-red-600 via-rose-600 to-red-600 text-white flex items-center justify-between shadow-lg shadow-red-600/40 border border-red-300 animate-pulse ring-2 ring-red-400/40">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="w-7 h-7 rounded-lg bg-black/20 flex items-center justify-center shrink-0">
+                      <Zap className="w-4 h-4 text-yellow-300 fill-yellow-300" />
+                    </div>
+                    <div className="text-left min-w-0">
+                      <div className="text-xs font-black uppercase tracking-wider truncate">
+                        ⚡ BREAK POINT (จะโดนเบรค!)
+                      </div>
+                      <div className="text-[10px] sm:text-[11px] font-medium text-rose-100 truncate">
+                        {serverPlayerName} เสี่ยงโดนเบรก! • {pointContext.pointHolderName} มีโอกาสเบรกเกมเสิร์ฟ
+                      </div>
+                    </div>
+                  </div>
+                  <span className="text-[10px] bg-slate-950 text-rose-300 font-black px-2 py-0.5 rounded-md shrink-0 ml-1.5 shadow">
+                    จะโดนเบรค
+                  </span>
+                </div>
+              ) : pointContext.badgeType === 'deciding' ? (
+                <div className="w-full h-full py-1 px-3 rounded-xl bg-gradient-to-r from-amber-600 via-orange-600 to-amber-600 text-white flex items-center justify-between shadow-lg border border-amber-300 animate-pulse">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="w-7 h-7 rounded-lg bg-black/20 flex items-center justify-center shrink-0">
+                      <Flame className="w-4 h-4 text-yellow-300" />
+                    </div>
+                    <div className="text-left min-w-0">
+                      <div className="text-xs font-black uppercase tracking-wider truncate">
+                        🔥 แต้มตัดสินเกม (Deciding Point No-Ad)
+                      </div>
+                      <div className="text-[10px] sm:text-[11px] font-medium text-amber-100 truncate">
+                        40-40 แต้มเดียวจบเกม! ฝ่ายรับเลือกคอร์ตรับเสิร์ฟได้
+                      </div>
+                    </div>
+                  </div>
+                  <span className="text-[10px] bg-slate-950 text-amber-300 font-black px-2 py-0.5 rounded-md shrink-0 ml-1.5 shadow">
+                    แต้มตัดสิน
+                  </span>
+                </div>
+              ) : match.isFinished ? (
+                <div className="w-full h-full py-1 px-3 rounded-xl bg-emerald-950/90 border border-emerald-500/80 text-emerald-200 flex items-center justify-between shadow-md">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="w-7 h-7 rounded-lg bg-emerald-500/20 flex items-center justify-center shrink-0">
+                      <Trophy className="w-4 h-4 text-emerald-400" />
+                    </div>
+                    <div className="text-left min-w-0">
+                      <div className="text-xs font-black text-emerald-300 uppercase tracking-wide truncate">
+                        🏆 จบการแข่งขัน (Match Finished)
+                      </div>
+                      <div className="text-[10px] sm:text-[11px] text-emerald-200/90 truncate">
+                        การแข่งขันสิ้นสุดลงแล้ว สามารถดูกราฟหรือสร้างภาพสรุปได้
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={onOpenInfographic}
+                    className="text-[10px] bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black px-2 py-0.5 rounded-md shrink-0 ml-1.5 shadow transition"
+                  >
+                    ภาพสรุป
+                  </button>
+                </div>
+              ) : isFirstServeFault ? (
+                <div className="w-full h-full py-1 px-3 rounded-xl bg-amber-950/80 border border-amber-500/70 text-amber-200 flex items-center justify-between shadow">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="w-7 h-7 rounded-lg bg-amber-500/20 flex items-center justify-center shrink-0">
+                      <AlertTriangle className="w-4 h-4 text-amber-400 animate-pulse" />
+                    </div>
+                    <div className="text-left min-w-0">
+                      <div className="text-xs font-black text-amber-300 uppercase tracking-wide truncate">
+                        ฟอลต์เสิร์ฟแรก (1st Serve Fault)
+                      </div>
+                      <div className="text-[10px] sm:text-[11px] text-amber-200/90 truncate">
+                        {serverPlayerName} กำลังเสิร์ฟลูกที่สอง (2nd Serve)
+                      </div>
+                    </div>
+                  </div>
+                  <span className="text-[10px] bg-amber-500 text-slate-950 font-black px-2 py-0.5 rounded-md shrink-0 ml-1.5 shadow">
+                    เสิร์ฟ 2
+                  </span>
+                </div>
+              ) : (
+                /* จบเกมล่าสุด • เริ่มเกมใหม่ */
+                <div className="w-full h-full py-1 px-3 rounded-xl bg-slate-800/90 border border-slate-700 text-slate-200 flex items-center justify-between shadow">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="w-7 h-7 rounded-lg bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center shrink-0">
+                      <span className="text-sm">🎉</span>
+                    </div>
+                    <div className="text-left min-w-0">
+                      <div className="text-xs font-black text-white truncate">
+                        จบเกมที่ผ่านมา • กำลังเริ่มเกมถัดไป
+                      </div>
+                      <div className="text-[10px] sm:text-[11px] text-slate-300 truncate">
+                        สกอร์เซตที่ {currentSetIndex + 1}: {team1.name} {currentSet.team1Games}-{currentSet.team2Games} {team2.name}
+                      </div>
+                    </div>
+                  </div>
+                  <span className="text-[10px] bg-slate-900 border border-slate-700 text-emerald-400 font-bold px-2 py-0.5 rounded-md shrink-0 ml-1.5">
+                    เกมใหม่
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* 2. ส่วนกลาง: แสดงคอร์ต (Tennis Court Display) */}
+          <div className="flex-1 flex flex-col items-center justify-center min-h-0 w-full overflow-hidden">
             <InteractiveCourt match={match} />
           </div>
 
-          {/* Center Referee Controls Bar */}
-          <div className="shrink-0 pt-1 border-t border-slate-800 flex flex-col gap-1">
-            {/* SERVE FAULT BUTTONS */}
-            <div className="flex items-center gap-1">
-              {!isFirstServeFault ? (
-                /* 1st Serve Fault */
-                <button
-                  onClick={onFirstServeFault}
-                  className="flex-1 py-1.5 px-2 rounded-xl bg-amber-950/70 hover:bg-amber-900 border border-amber-600/60 text-amber-300 text-xs font-bold flex items-center justify-center gap-1.5 active:scale-95 shadow transition"
-                  title="เสิร์ฟแรกเสีย จะเปลี่ยนเป็นสถานะเสิร์ฟสอง"
-                >
-                  <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
-                  <span>⚠️ เสิร์ฟเสียลูกแรก (1st Fault)</span>
-                </button>
-              ) : (
-                /* 2nd Serve Fault -> DOUBLE FAULT */
-                <div className="flex-1 flex items-center gap-1">
-                  <button
-                    onClick={onSecondServeFault}
-                    className="flex-1 py-1.5 px-2 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-black flex items-center justify-center gap-1.5 active:scale-95 shadow-lg shadow-red-950 animate-pulse transition"
-                    title="เสิร์ฟเสียลูกสอง -> เป็นดับเบิ้ลฟอลต์ ฝ่ายตรงข้ามได้แต้มทันที"
-                  >
-                    <AlertOctagon className="w-4 h-4 text-white" />
-                    <span>🚨 เสิร์ฟเสียลูกที่ 2 (ดับเบิ้ลฟอลต์!)</span>
-                  </button>
-
-                  <button
-                    onClick={onResetServeFault}
-                    className="py-1.5 px-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-[10px] font-semibold active:scale-95 transition"
-                    title="ยกเลิกฟอลต์เสิร์ฟแรก (เสิร์ฟใหม่ / Let)"
-                  >
-                    เสิร์ฟใหม่
-                  </button>
-                </div>
-              )}
-
-              {/* Point History Log */}
-              {onOpenPointHistory && (
-                <button
-                  onClick={onOpenPointHistory}
-                  className="py-1.5 px-2 rounded-xl bg-indigo-950/70 hover:bg-indigo-900 border border-indigo-700/60 active:scale-95 text-indigo-200 text-xs font-bold flex items-center justify-center gap-1 transition"
-                  title="ดูประวัติแต้มย้อนหลัง"
-                >
-                  <History className="w-3.5 h-3.5 text-indigo-400" />
-                  <span>ประวัติ ({match.pointsHistory.length})</span>
-                </button>
-              )}
-
-              {/* Undo Last Point */}
+          {/* 3. ส่วนล่าง: แสดงปุ่มที่สามารถกดง่าย (Structured 2-Row Referee Dock: Never Clips or Vanishes) */}
+          <div className="shrink-0 pt-1.5 border-t border-slate-800/80 flex flex-col gap-1.5">
+            {/* ROW 1: Serve Fault Management */}
+            {!isFirstServeFault ? (
+              /* 1st Serve Fault - Full width button, high visibility, clean single icon */
               <button
-                onClick={onUndo}
-                disabled={match.pointsHistory.length === 0}
-                className="py-1.5 px-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed text-slate-200 text-xs font-bold flex items-center justify-center gap-1 border border-slate-700 transition"
-                title="ย้อนกลับแต้มล่าสุด (Undo Point)"
+                onClick={onFirstServeFault}
+                className="w-full h-10 sm:h-11 py-1.5 px-3 rounded-xl bg-gradient-to-r from-amber-950/90 to-amber-900/90 hover:from-amber-900 hover:to-amber-800 border-2 border-amber-500/70 text-amber-300 text-xs sm:text-sm font-black flex items-center justify-center gap-2 active:scale-98 shadow-md shadow-amber-950/40 transition"
+                title="เสิร์ฟแรกเสีย จะเปลี่ยนสถานะเป็นเสิร์ฟสอง"
               >
-                <RotateCcw className="w-3.5 h-3.5 text-amber-400" />
-                <span>ถอยแต้ม</span>
+                <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                <span>ฟอลต์เสิร์ฟแรก (1st Fault)</span>
               </button>
+            ) : (
+              /* 2nd Serve Fault -> DOUBLE FAULT (2/3 width) + Let button (1/3 width) */
+              <div className="grid grid-cols-3 gap-1.5 w-full">
+                <button
+                  onClick={onSecondServeFault}
+                  className="col-span-2 h-10 sm:h-11 py-1.5 px-2 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white text-xs sm:text-sm font-black flex items-center justify-center gap-1.5 active:scale-98 shadow-xl shadow-red-950 border-2 border-red-300 animate-pulse transition"
+                  title="เสิร์ฟเสียลูกที่ 2 -> ดับเบิ้ลฟอลต์ ฝ่ายรับได้แต้มทันที"
+                >
+                  <AlertOctagon className="w-4 h-4 text-white shrink-0" />
+                  <span className="truncate">ดับเบิ้ลฟอลต์! (เสียแต้ม)</span>
+                </button>
 
-              {/* 25s Serve Shot Clock */}
-              <button
-                onClick={() => {
-                  if (isClockRunning) {
-                    setIsClockRunning(false);
-                  } else if (serveClock === 0) {
-                    handleResetClock();
-                  } else {
-                    setIsClockRunning(true);
-                  }
-                }}
-                onDoubleClick={handleResetClock}
-                className={`py-1 px-2 rounded-xl border text-[11px] font-black flex items-center gap-1 transition shrink-0 ${
-                  serveClock <= 5
-                    ? 'bg-red-600 text-white border-red-400 animate-pulse'
-                    : isClockRunning
-                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/50'
-                    : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
-                }`}
-                title="นาฬิกาเสิร์ฟ 25 วินาที: แตะเริ่ม/หยุด, ดับเบิ้ลคลิกเพื่อรีเซ็ต 25 วิ"
-              >
-                <Timer className="w-3 h-3 text-amber-400" />
-                <span>{serveClock}s</span>
-              </button>
-            </div>
+                <button
+                  onClick={onResetServeFault}
+                  className="col-span-1 h-10 sm:h-11 px-2 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-98 border-2 border-slate-700 text-slate-200 text-xs font-bold flex items-center justify-center transition"
+                  title="ยกเลิกฟอลต์เสิร์ฟแรก (เสิร์ฟใหม่ / Let)"
+                >
+                  <span>เสิร์ฟใหม่ (Let)</span>
+                </button>
+              </div>
+            )}
+
+            {/* ROW 2: Undo Point (Full Width, Easy to Tap) */}
+            <button
+              onClick={onUndo}
+              disabled={match.pointsHistory.length === 0}
+              className="h-10 sm:h-11 w-full rounded-xl bg-slate-800/90 hover:bg-slate-700 active:scale-98 disabled:opacity-30 disabled:cursor-not-allowed text-slate-200 text-xs sm:text-sm font-bold flex items-center justify-center gap-2 border-2 border-slate-700 hover:border-slate-600 transition shadow-sm"
+              title="ย้อนกลับแต้มล่าสุด (Undo Point)"
+            >
+              <RotateCcw className="w-4 h-4 text-amber-400 shrink-0" />
+              <span>ถอยแต้ม (Undo)</span>
+            </button>
           </div>
         </div>
 
@@ -486,8 +608,32 @@ export const LandscapeScoreboard: React.FC<LandscapeScoreboardProps> = ({
             </div>
           </div>
 
-          {/* Giant Score Display */}
+          {/* Giant Score Display with Prominent Serving Badge on Head of Score */}
           <div className="my-auto py-1 text-center flex flex-col items-center justify-center">
+            {/* Server Badge on Head of Score (โชว์บนหัวคะแนนให้เห็นชัดๆ) */}
+            <div className="w-full mb-1 flex items-center justify-center">
+              {isServerT2 ? (
+                <button
+                  type="button"
+                  onClick={onToggleServer}
+                  className="px-3 py-1 rounded-full bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-black text-xs sm:text-sm flex items-center justify-center gap-1.5 shadow-lg shadow-yellow-500/40 border border-yellow-200 transition active:scale-95 animate-pulse"
+                  title="คลิกเพื่อสลับคนเสิร์ฟ"
+                >
+                  <span className="text-sm">🎾</span>
+                  <span className="truncate">{serverPlayerName} เสิร์ฟ ({isFirstServeFault ? 'เสิร์ฟ 2' : 'เสิร์ฟ 1'})</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={onToggleServer}
+                  className="px-2.5 py-0.5 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 text-[11px] font-bold border border-slate-700/80 transition active:scale-95"
+                  title="คลิกเพื่อสลับให้ฝ่ายนี้เสิร์ฟ"
+                >
+                  <span>🛡️ ฝ่ายรับเสิร์ฟ</span>
+                </button>
+              )}
+            </div>
+
             <div
               className={`font-mono text-5xl sm:text-6xl font-black tracking-tight drop-shadow-md ${
                 currentGame.team2Display === 'AD' ? 'text-amber-300 scale-105' : 'text-white'
@@ -559,6 +705,51 @@ export const LandscapeScoreboard: React.FC<LandscapeScoreboardProps> = ({
           </div>
         </div>
       </main>
+
+      {/* Reset Match Confirmation Modal */}
+      {showResetConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-sm rounded-2xl bg-slate-900 border border-slate-700 p-5 shadow-2xl flex flex-col gap-4 text-center">
+            <div className="w-12 h-12 rounded-full bg-rose-950/80 border border-rose-700/60 text-rose-400 flex items-center justify-center mx-auto">
+              <RotateCcw className="w-6 h-6" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-white">ต้องการเริ่มเกมใหม่หรือไม่?</h3>
+              <p className="text-xs text-slate-400 mt-1">
+                แต้มและสถิติในแมตช์ปัจจุบันจะถูกล้าง คุณสามารถเลือกเริ่มใหม่ด้วยผู้เล่นเดิม หรือตั้งค่าแมตช์ใหม่
+              </p>
+            </div>
+            <div className="flex flex-col gap-2 pt-1">
+              <button
+                onClick={() => {
+                  setShowResetConfirm(false);
+                  onResetMatch();
+                }}
+                className="w-full py-2.5 px-3 rounded-xl bg-rose-600 hover:bg-rose-500 active:scale-98 text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg transition"
+              >
+                <RotateCcw className="w-4 h-4" />
+                <span>รีเซ็ตแต้มเป็น 0-0 (ใช้ผู้เล่นเดิม)</span>
+              </button>
+              <button
+                onClick={() => {
+                  setShowResetConfirm(false);
+                  onOpenSettings();
+                }}
+                className="w-full py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-98 text-slate-200 font-bold text-xs sm:text-sm flex items-center justify-center gap-2 border border-slate-700 transition"
+              >
+                <Settings className="w-4 h-4 text-slate-400" />
+                <span>ตั้งค่าแมตช์ใหม่ (เปลี่ยนผู้เล่น/กติกา)</span>
+              </button>
+              <button
+                onClick={() => setShowResetConfirm(false)}
+                className="w-full py-2 px-3 rounded-xl bg-transparent hover:bg-slate-800 text-slate-400 hover:text-slate-200 text-xs font-semibold transition"
+              >
+                ยกเลิก
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

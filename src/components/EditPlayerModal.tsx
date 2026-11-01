@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { MatchState } from '../types/tennis';
-import { UserCheck, X, Check, Edit3 } from 'lucide-react';
-import { getSavedPlayerRoster, saveMultiplePlayersToRoster } from '../utils/playerRoster';
+import { UserCheck, X, Check, Edit3, Trash2 } from 'lucide-react';
+import { getSavedPlayerRoster, saveMultiplePlayersToRoster, removePlayerFromRoster } from '../utils/playerRoster';
 
 interface EditPlayerModalProps {
   isOpen: boolean;
@@ -31,9 +31,15 @@ export const EditPlayerModal: React.FC<EditPlayerModalProps> = ({
   const [t2P2, setT2P2] = useState(match.team2.players[1]?.name || 'Partner 2');
 
   const [serverTeam, setServerTeamState] = useState<'team1' | 'team2'>(match.currentServerTeam);
-  const [savedRoster] = useState<string[]>(() => getSavedPlayerRoster());
+  const [savedRoster, setSavedRoster] = useState<string[]>(() => getSavedPlayerRoster());
+  const [showRosterManager, setShowRosterManager] = useState<boolean>(false);
 
   if (!isOpen) return null;
+
+  const handleDeleteRoster = (name: string) => {
+    const updated = removePlayerFromRoster(name);
+    setSavedRoster([...updated]);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -91,51 +97,61 @@ export const EditPlayerModal: React.FC<EditPlayerModalProps> = ({
             <label className="text-xs font-semibold text-emerald-400 block">
               {isDoubles ? '🎾 ทีม 1 (Doubles Team 1):' : '🎾 ผู้เล่น 1 (Player 1):'}
             </label>
-            <div>
+            <div className="flex gap-2 items-center w-full">
               <input
                 type="text"
                 value={t1P1}
                 onChange={(e) => setT1P1(e.target.value)}
-                placeholder={isDoubles ? 'ผู้เล่นคนที่ 1' : 'กรอกชื่อผู้เล่น 1'}
-                className="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-xs text-white focus:outline-hidden focus:border-emerald-500"
+                placeholder={isDoubles ? 'ผู้เล่นคนที่ 1 (คนแรก)' : 'กรอกชื่อผู้เล่น 1'}
+                className="flex-1 min-w-0 px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-xs text-white focus:outline-hidden focus:border-emerald-500"
                 required
               />
-              <div className="flex gap-1 overflow-x-auto mt-1 py-0.5 no-scrollbar">
-                {savedRoster.slice(0, 6).map((name, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => setT1P1(name)}
-                    className="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 hover:bg-emerald-900/60 hover:text-emerald-300 text-slate-400 border border-slate-700/60 shrink-0"
-                  >
-                    {name}
-                  </button>
-                ))}
-              </div>
+              {savedRoster.length > 0 && (
+                <select
+                  value=""
+                  onChange={(e) => {
+                    if (e.target.value) setT1P1(e.target.value);
+                  }}
+                  className="w-28 sm:w-32 px-2 py-2 rounded-xl bg-slate-800/90 border border-slate-700 text-[11px] text-slate-300 focus:outline-hidden shrink-0"
+                  title="เลือกจากรายชื่อที่เคยบันทึกไว้"
+                >
+                  <option value="">📂 เลือกชื่อ...</option>
+                  {savedRoster.map((name) => (
+                    <option key={name} value={name}>
+                      {name}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
 
             {isDoubles && (
-              <div>
+              <div className="flex gap-2 items-center w-full">
                 <input
                   type="text"
                   value={t1P2}
                   onChange={(e) => setT1P2(e.target.value)}
                   placeholder="ผู้เล่นคนที่ 2 (คู่หู)"
-                  className="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-xs text-white focus:outline-hidden focus:border-emerald-500"
+                  className="flex-1 min-w-0 px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-xs text-white focus:outline-hidden focus:border-emerald-500"
                   required
                 />
-                <div className="flex gap-1 overflow-x-auto mt-1 py-0.5 no-scrollbar">
-                  {savedRoster.slice(0, 6).map((name, idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={() => setT1P2(name)}
-                      className="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 hover:bg-emerald-900/60 hover:text-emerald-300 text-slate-400 border border-slate-700/60 shrink-0"
-                    >
-                      {name}
-                    </button>
-                  ))}
-                </div>
+                {savedRoster.length > 0 && (
+                  <select
+                    value=""
+                    onChange={(e) => {
+                      if (e.target.value) setT1P2(e.target.value);
+                    }}
+                    className="w-28 sm:w-32 px-2 py-2 rounded-xl bg-slate-800/90 border border-slate-700 text-[11px] text-slate-300 focus:outline-hidden shrink-0"
+                    title="เลือกจากรายชื่อที่เคยบันทึกไว้"
+                  >
+                    <option value="">📂 เลือกชื่อ...</option>
+                    {savedRoster.map((name) => (
+                      <option key={name} value={name}>
+                        {name}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
             )}
           </div>
@@ -145,51 +161,104 @@ export const EditPlayerModal: React.FC<EditPlayerModalProps> = ({
             <label className="text-xs font-semibold text-sky-400 block">
               {isDoubles ? '🎾 ทีม 2 (Doubles Team 2):' : '🎾 ผู้เล่น 2 (Player 2):'}
             </label>
-            <div>
+            <div className="flex gap-2 items-center w-full">
               <input
                 type="text"
                 value={t2P1}
                 onChange={(e) => setT2P1(e.target.value)}
-                placeholder={isDoubles ? 'ผู้เล่นคนที่ 1' : 'กรอกชื่อผู้เล่น 2'}
-                className="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-xs text-white focus:outline-hidden focus:border-sky-500"
+                placeholder={isDoubles ? 'ผู้เล่นคนที่ 1 (คนแรก)' : 'กรอกชื่อผู้เล่น 2'}
+                className="flex-1 min-w-0 px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-xs text-white focus:outline-hidden focus:border-sky-500"
                 required
               />
-              <div className="flex gap-1 overflow-x-auto mt-1 py-0.5 no-scrollbar">
-                {savedRoster.slice(0, 6).map((name, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => setT2P1(name)}
-                    className="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 hover:bg-sky-900/60 hover:text-sky-300 text-slate-400 border border-slate-700/60 shrink-0"
-                  >
-                    {name}
-                  </button>
-                ))}
-              </div>
+              {savedRoster.length > 0 && (
+                <select
+                  value=""
+                  onChange={(e) => {
+                    if (e.target.value) setT2P1(e.target.value);
+                  }}
+                  className="w-28 sm:w-32 px-2 py-2 rounded-xl bg-slate-800/90 border border-slate-700 text-[11px] text-slate-300 focus:outline-hidden shrink-0"
+                  title="เลือกจากรายชื่อที่เคยบันทึกไว้"
+                >
+                  <option value="">📂 เลือกชื่อ...</option>
+                  {savedRoster.map((name) => (
+                    <option key={name} value={name}>
+                      {name}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
 
             {isDoubles && (
-              <div>
+              <div className="flex gap-2 items-center w-full">
                 <input
                   type="text"
                   value={t2P2}
                   onChange={(e) => setT2P2(e.target.value)}
                   placeholder="ผู้เล่นคนที่ 2 (คู่หู)"
-                  className="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-xs text-white focus:outline-hidden focus:border-sky-500"
+                  className="flex-1 min-w-0 px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-xs text-white focus:outline-hidden focus:border-sky-500"
                   required
                 />
-                <div className="flex gap-1 overflow-x-auto mt-1 py-0.5 no-scrollbar">
-                  {savedRoster.slice(0, 6).map((name, idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={() => setT2P2(name)}
-                      className="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 hover:bg-sky-900/60 hover:text-sky-300 text-slate-400 border border-slate-700/60 shrink-0"
+                {savedRoster.length > 0 && (
+                  <select
+                    value=""
+                    onChange={(e) => {
+                      if (e.target.value) setT2P2(e.target.value);
+                    }}
+                    className="w-28 sm:w-32 px-2 py-2 rounded-xl bg-slate-800/90 border border-slate-700 text-[11px] text-slate-300 focus:outline-hidden shrink-0"
+                    title="เลือกจากรายชื่อที่เคยบันทึกไว้"
+                  >
+                    <option value="">📂 เลือกชื่อ...</option>
+                    {savedRoster.map((name) => (
+                      <option key={name} value={name}>
+                        {name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Manage / Delete Saved Roster Section */}
+          <div className="p-2.5 bg-slate-950/80 rounded-xl border border-slate-800">
+            <button
+              type="button"
+              onClick={() => setShowRosterManager(!showRosterManager)}
+              className="w-full flex items-center justify-between text-xs text-slate-400 hover:text-white transition"
+            >
+              <span className="flex items-center gap-1.5 font-bold text-amber-300">
+                <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                <span>จัดการ / ลบรายชื่อที่เคยบันทึกไว้ ({savedRoster.length})</span>
+              </span>
+              <span className="text-[10px] text-slate-500 font-bold">
+                {showRosterManager ? '▲ ซ่อน' : '▼ แสดงรายชื่อ'}
+              </span>
+            </button>
+
+            {showRosterManager && (
+              <div className="mt-2 pt-2 border-t border-slate-800 max-h-36 overflow-y-auto space-y-1">
+                {savedRoster.length === 0 ? (
+                  <p className="text-[10px] text-slate-500 text-center py-2">ไม่มีรายชื่อที่บันทึกไว้</p>
+                ) : (
+                  savedRoster.map((name) => (
+                    <div
+                      key={name}
+                      className="flex items-center justify-between py-1 px-2.5 rounded-lg bg-slate-900 border border-slate-800 text-xs"
                     >
-                      {name}
-                    </button>
-                  ))}
-                </div>
+                      <span className="text-slate-200 font-medium">{name}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteRoster(name)}
+                        className="text-rose-400 hover:text-rose-300 hover:bg-rose-950/60 px-2 py-0.5 rounded transition text-[11px] font-bold flex items-center gap-1"
+                        title={`ลบ "${name}" ออกจากประวัติ`}
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        <span>ลบ</span>
+                      </button>
+                    </div>
+                  ))
+                )}
               </div>
             )}
           </div>

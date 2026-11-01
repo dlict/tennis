@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { MatchFormat, MatchSettings, MatchType, TiebreakFormat } from '../types/tennis';
-import { Users, User as UserIcon, Play, Settings2, X } from 'lucide-react';
-import { getSavedPlayerRoster, saveMultiplePlayersToRoster } from '../utils/playerRoster';
+import { Users, User as UserIcon, Play, Settings2, X, Trash2 } from 'lucide-react';
+import { getSavedPlayerRoster, saveMultiplePlayersToRoster, removePlayerFromRoster } from '../utils/playerRoster';
 
 interface MatchSetupModalProps {
   isOpen: boolean;
@@ -32,9 +32,15 @@ export const MatchSetupModal: React.FC<MatchSetupModalProps> = ({
   const [t1Partner, setT1Partner] = useState('Partner 1');
   const [t2Partner, setT2Partner] = useState('Partner 2');
   const [initialServer, setInitialServer] = useState<'team1' | 'team2'>('team1');
-  const [savedRoster] = useState<string[]>(() => getSavedPlayerRoster());
+  const [savedRoster, setSavedRoster] = useState<string[]>(() => getSavedPlayerRoster());
+  const [showRosterManager, setShowRosterManager] = useState<boolean>(false);
 
   if (!isOpen) return null;
+
+  const handleDeleteRoster = (name: string) => {
+    const updated = removePlayerFromRoster(name);
+    setSavedRoster([...updated]);
+  };
 
   const handleStart = (e: React.FormEvent) => {
     e.preventDefault();
@@ -122,97 +128,109 @@ export const MatchSetupModal: React.FC<MatchSetupModalProps> = ({
             </div>
           </div>
 
-          {/* Quick Roster Selector Helper */}
-          {savedRoster.length > 0 && (
-            <div className="bg-slate-950/70 p-2.5 rounded-xl border border-slate-800">
-              <span className="text-[10px] font-bold text-slate-400 block mb-1 flex items-center gap-1">
-                <span>⚡ รายชื่อที่เคยบันทึกไว้ (แตะเพื่อคัดลอกใส่):</span>
-              </span>
-              <div className="flex flex-wrap gap-1 max-h-16 overflow-y-auto">
-                {savedRoster.map((name, i) => (
-                  <span
-                    key={i}
-                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-slate-300 text-[10px] hover:border-emerald-500 hover:text-emerald-300"
+          {/* Player Names */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-slate-300 block">รายชื่อผู้เล่น:</label>
+              {savedRoster.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setShowRosterManager(!showRosterManager)}
+                  className="text-[11px] text-amber-400 hover:text-amber-300 font-semibold flex items-center gap-1 transition"
+                >
+                  <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                  <span>จัดการ/ลบรายชื่อที่บันทึก ({savedRoster.length})</span>
+                </button>
+              )}
+            </div>
+
+            {/* Expandable Roster Manager */}
+            {showRosterManager && (
+              <div className="p-2.5 bg-slate-950 rounded-xl border border-slate-800 max-h-36 overflow-y-auto space-y-1">
+                <span className="text-[10px] font-bold text-slate-400 block mb-1">
+                  รายชื่อที่บันทึกไว้ในระบบ (กดลบเพื่อนำออก):
+                </span>
+                {savedRoster.map((name) => (
+                  <div
+                    key={name}
+                    className="flex items-center justify-between py-1 px-2.5 rounded-lg bg-slate-900 border border-slate-800 text-xs"
                   >
-                    <span>{name}</span>
+                    <span className="text-slate-200 font-medium">{name}</span>
                     <button
                       type="button"
-                      onClick={() => setT1Name(name)}
-                      className="text-emerald-400 hover:underline font-bold text-[9px] px-1"
-                      title="ใส่ในทีม 1"
+                      onClick={() => handleDeleteRoster(name)}
+                      className="text-rose-400 hover:text-rose-300 hover:bg-rose-950/60 px-2 py-0.5 rounded transition text-[11px] font-bold flex items-center gap-1"
+                      title={`ลบ "${name}"`}
                     >
-                      T1
+                      <Trash2 className="w-3 h-3" />
+                      <span>ลบ</span>
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => setT2Name(name)}
-                      className="text-sky-400 hover:underline font-bold text-[9px] px-1"
-                      title="ใส่ในทีม 2"
-                    >
-                      T2
-                    </button>
-                  </span>
+                  </div>
                 ))}
               </div>
-            </div>
-          )}
-
-          {/* Player Names */}
-          <div className="space-y-2">
-            <label className="text-xs font-semibold text-slate-300 block">รายชื่อผู้เล่น:</label>
+            )}
 
             {/* Team 1 */}
             <div className="p-3 bg-slate-950/60 rounded-xl border border-slate-800 space-y-2">
               <span className="text-[11px] font-bold text-emerald-400 block">
-                {matchType === 'doubles' ? 'ทีม 1 (Team 1)' : 'ผู้เล่น 1 (Player 1)'}
+                {matchType === 'doubles' ? '🎾 ทีม 1 (Team 1)' : '🎾 ผู้เล่น 1 (Player 1)'}
               </span>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <div>
+              <div className="space-y-2">
+                <div className="flex gap-2 items-center w-full">
                   <input
                     type="text"
                     value={t1Name}
                     onChange={(e) => setT1Name(e.target.value)}
-                    placeholder="ชื่อผู้เล่น 1"
-                    className="w-full px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-xs text-white focus:outline-hidden focus:border-emerald-500"
+                    placeholder={matchType === 'doubles' ? 'ชื่อผู้เล่น 1 (คนแรก)' : 'ชื่อผู้เล่น 1'}
+                    className="flex-1 min-w-0 px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-xs text-white focus:outline-hidden focus:border-emerald-500"
                     required
                   />
-                  {/* Quick Pick row */}
-                  <div className="flex gap-1 overflow-x-auto mt-1 py-0.5 no-scrollbar">
-                    {savedRoster.slice(0, 5).map((r, idx) => (
-                      <button
-                        key={idx}
-                        type="button"
-                        onClick={() => setT1Name(r)}
-                        className="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 hover:bg-emerald-900/60 hover:text-emerald-300 text-slate-400 border border-slate-700/60 shrink-0"
-                      >
-                        {r}
-                      </button>
-                    ))}
-                  </div>
+                  {savedRoster.length > 0 && (
+                    <select
+                      value=""
+                      onChange={(e) => {
+                        if (e.target.value) setT1Name(e.target.value);
+                      }}
+                      className="w-28 sm:w-32 px-2 py-2 rounded-xl bg-slate-800/90 border border-slate-700 text-[11px] text-slate-300 focus:outline-hidden shrink-0"
+                      title="เลือกจากรายชื่อที่บันทึกไว้"
+                    >
+                      <option value="">📂 เลือกชื่อ...</option>
+                      {savedRoster.map((r) => (
+                        <option key={r} value={r}>
+                          {r}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                 </div>
 
                 {matchType === 'doubles' && (
-                  <div>
+                  <div className="flex gap-2 items-center w-full">
                     <input
                       type="text"
                       value={t1Partner}
                       onChange={(e) => setT1Partner(e.target.value)}
                       placeholder="ชื่อผู้เล่นคู่หู 1"
-                      className="w-full px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-xs text-white focus:outline-hidden focus:border-emerald-500"
+                      className="flex-1 min-w-0 px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-xs text-white focus:outline-hidden focus:border-emerald-500"
                       required
                     />
-                    <div className="flex gap-1 overflow-x-auto mt-1 py-0.5 no-scrollbar">
-                      {savedRoster.slice(0, 5).map((r, idx) => (
-                        <button
-                          key={idx}
-                          type="button"
-                          onClick={() => setT1Partner(r)}
-                          className="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 hover:bg-emerald-900/60 hover:text-emerald-300 text-slate-400 border border-slate-700/60 shrink-0"
-                        >
-                          {r}
-                        </button>
-                      ))}
-                    </div>
+                    {savedRoster.length > 0 && (
+                      <select
+                        value=""
+                        onChange={(e) => {
+                          if (e.target.value) setT1Partner(e.target.value);
+                        }}
+                        className="w-28 sm:w-32 px-2 py-2 rounded-xl bg-slate-800/90 border border-slate-700 text-[11px] text-slate-300 focus:outline-hidden shrink-0"
+                        title="เลือกจากรายชื่อที่บันทึกไว้"
+                      >
+                        <option value="">📂 เลือกชื่อ...</option>
+                        {savedRoster.map((r) => (
+                          <option key={r} value={r}>
+                            {r}
+                          </option>
+                        ))}
+                      </select>
+                    )}
                   </div>
                 )}
               </div>
@@ -221,54 +239,64 @@ export const MatchSetupModal: React.FC<MatchSetupModalProps> = ({
             {/* Team 2 */}
             <div className="p-3 bg-slate-950/60 rounded-xl border border-slate-800 space-y-2">
               <span className="text-[11px] font-bold text-sky-400 block">
-                {matchType === 'doubles' ? 'ทีม 2 (Team 2)' : 'ผู้เล่น 2 (Player 2)'}
+                {matchType === 'doubles' ? '🎾 ทีม 2 (Team 2)' : '🎾 ผู้เล่น 2 (Player 2)'}
               </span>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <div>
+              <div className="space-y-2">
+                <div className="flex gap-2 items-center w-full">
                   <input
                     type="text"
                     value={t2Name}
                     onChange={(e) => setT2Name(e.target.value)}
-                    placeholder="ชื่อผู้เล่น 2"
-                    className="w-full px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-xs text-white focus:outline-hidden focus:border-sky-500"
+                    placeholder={matchType === 'doubles' ? 'ชื่อผู้เล่น 2 (คนแรก)' : 'ชื่อผู้เล่น 2'}
+                    className="flex-1 min-w-0 px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-xs text-white focus:outline-hidden focus:border-sky-500"
                     required
                   />
-                  <div className="flex gap-1 overflow-x-auto mt-1 py-0.5 no-scrollbar">
-                    {savedRoster.slice(0, 5).map((r, idx) => (
-                      <button
-                        key={idx}
-                        type="button"
-                        onClick={() => setT2Name(r)}
-                        className="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 hover:bg-sky-900/60 hover:text-sky-300 text-slate-400 border border-slate-700/60 shrink-0"
-                      >
-                        {r}
-                      </button>
-                    ))}
-                  </div>
+                  {savedRoster.length > 0 && (
+                    <select
+                      value=""
+                      onChange={(e) => {
+                        if (e.target.value) setT2Name(e.target.value);
+                      }}
+                      className="w-28 sm:w-32 px-2 py-2 rounded-xl bg-slate-800/90 border border-slate-700 text-[11px] text-slate-300 focus:outline-hidden shrink-0"
+                      title="เลือกจากรายชื่อที่บันทึกไว้"
+                    >
+                      <option value="">📂 เลือกชื่อ...</option>
+                      {savedRoster.map((r) => (
+                        <option key={r} value={r}>
+                          {r}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                 </div>
 
                 {matchType === 'doubles' && (
-                  <div>
+                  <div className="flex gap-2 items-center w-full">
                     <input
                       type="text"
                       value={t2Partner}
                       onChange={(e) => setT2Partner(e.target.value)}
                       placeholder="ชื่อผู้เล่นคู่หู 2"
-                      className="w-full px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-xs text-white focus:outline-hidden focus:border-sky-500"
+                      className="flex-1 min-w-0 px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-xs text-white focus:outline-hidden focus:border-sky-500"
                       required
                     />
-                    <div className="flex gap-1 overflow-x-auto mt-1 py-0.5 no-scrollbar">
-                      {savedRoster.slice(0, 5).map((r, idx) => (
-                        <button
-                          key={idx}
-                          type="button"
-                          onClick={() => setT2Partner(r)}
-                          className="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 hover:bg-sky-900/60 hover:text-sky-300 text-slate-400 border border-slate-700/60 shrink-0"
-                        >
-                          {r}
-                        </button>
-                      ))}
-                    </div>
+                    {savedRoster.length > 0 && (
+                      <select
+                        value=""
+                        onChange={(e) => {
+                          if (e.target.value) setT2Partner(e.target.value);
+                        }}
+                        className="w-28 sm:w-32 px-2 py-2 rounded-xl bg-slate-800/90 border border-slate-700 text-[11px] text-slate-300 focus:outline-hidden shrink-0"
+                        title="เลือกจากรายชื่อที่บันทึกไว้"
+                      >
+                        <option value="">📂 เลือกชื่อ...</option>
+                        {savedRoster.map((r) => (
+                          <option key={r} value={r}>
+                            {r}
+                          </option>
+                        ))}
+                      </select>
+                    )}
                   </div>
                 )}
               </div>

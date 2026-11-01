@@ -30,7 +30,6 @@ import { EditPlayerModal } from './components/EditPlayerModal';
 import { SheetsSyncModal } from './components/SheetsSyncModal';
 import { MatchSetupModal } from './components/MatchSetupModal';
 import { PostMatchModal } from './components/PostMatchModal';
-import { PointHistoryModal } from './components/PointHistoryModal';
 
 import { Smartphone, RotateCcw, X, WifiOff } from 'lucide-react';
 
@@ -58,7 +57,6 @@ export default function App() {
   const [isSetupOpen, setIsSetupOpen] = useState(false);
   const [isPostMatchOpen, setIsPostMatchOpen] = useState(false);
   const [isEditPlayersOpen, setIsEditPlayersOpen] = useState(false);
-  const [isPointHistoryOpen, setIsPointHistoryOpen] = useState(false);
 
   const [detailModal, setDetailModal] = useState<{
     isOpen: boolean;
@@ -258,6 +256,19 @@ export default function App() {
     setIsPostMatchOpen(false);
   };
 
+  // Reset Match to 0-0 with Current Players & Rules
+  const handleResetCurrentMatch = () => {
+    const t1Name = match.team1.players[0]?.name || match.team1.name;
+    const t2Name = match.team2.players[0]?.name || match.team2.name;
+    const t1Partner = match.team1.players[1]?.name;
+    const t2Partner = match.team2.players[1]?.name;
+    const newMatch = createInitialMatch(match.settings, t1Name, t2Name, t1Partner, t2Partner);
+    newMatch.currentServerTeam = match.currentServerTeam;
+    setMatch(newMatch);
+    offlineSync.saveMatchLocally(newMatch);
+    setIsPostMatchOpen(false);
+  };
+
   return (
     <div className="h-full w-full bg-slate-950 text-slate-100 flex flex-col relative overflow-hidden select-none">
       {/* Portrait Mode Advisory Banner for Mobile */}
@@ -293,21 +304,11 @@ export default function App() {
         onOpenInfographic={() => setIsInfographicOpen(true)}
         onOpenSheetsSync={() => setIsSheetsModalOpen(true)}
         onOpenSettings={() => setIsSetupOpen(true)}
-        onOpenPointHistory={() => setIsPointHistoryOpen(true)}
+        onResetMatch={handleResetCurrentMatch}
         isOnline={isOnline}
         activeSheetUrl={activeSheetUrl}
         pendingSyncCount={pendingSyncCount}
       />
-
-      {/* Point-by-Point History Log Modal */}
-      {isPointHistoryOpen && (
-        <PointHistoryModal
-          isOpen={isPointHistoryOpen}
-          onClose={() => setIsPointHistoryOpen(false)}
-          match={match}
-          onUndoToPoint={handleUndo}
-        />
-      )}
 
       {/* Floating Offline Notification */}
       {!isOnline && (
