@@ -1,11 +1,12 @@
 {
-  "projectId": "gen-lang-client-0266541128",
-  "appId": "1:684606311922:web:6fbf001ccc647035496f6b",
-  "apiKey": "AIzaSyAB4ZbAwJTIcMEM3xhXYoo-wLcslE9xLZE",
-  "authDomain": "gen-lang-client-0266541128.firebaseapp.com",
-  "storageBucket": "gen-lang-client-0266541128.firebasestorage.app",
-  "messagingSenderId": "684606311922",
+  "projectId": "tennis-61a1f",
+  "appId": "1:381374149273:web:4ca25e017f88779bbcfe08",
+  "apiKey": "AIzaSyBp6EiUfNHk--WVFgkqJCfA3p2OkArbCtM",
+  "authDomain": "tennis-61a1f.firebaseapp.com",
+  "firestoreDatabaseId": "ai-studio-tennisproscorebo-1405a3b5-2156-4b6a-9115-3387db109423",
+  "storageBucket": "tennis-61a1f.firebasestorage.app",
+  "messagingSenderId": "381374149273",
   "measurementId": "",
-  "oAuthClientId": "684606311922-ckntrg1p5i1cbmkvm6iv9sfd553m0rjm.apps.googleusercontent.com",
+  "oAuthClientId": "381374149273-1oq2gnjll8sjo4noum9nsh005e2ggk2d.apps.googleusercontent.com",
   "recaptchaSiteKey": ""
 }

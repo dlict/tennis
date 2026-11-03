@@ -17,9 +17,14 @@ export default defineConfig(() => {
           name: 'TennisPro Scoreboard & Analytics',
           short_name: 'TennisPro',
           description: 'แอปนับแต้มเทนนิสระดับโปร ซิงค์ Google Sheets แบบเรียลไทม์ และวิเคราะห์สถิติฟอร์มการเล่น',
+          lang: 'th',
+          dir: 'ltr',
+          categories: ['sports', 'utilities'],
+          prefer_related_applications: false,
           theme_color: '#0b1f18',
           background_color: '#06140f',
           display: 'standalone',
+          display_override: ['standalone', 'window-controls-overlay'],
           orientation: 'landscape',
           start_url: '/',
           scope: '/',
@@ -46,6 +51,7 @@ export default defineConfig(() => {
         },
         workbox: {
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
+          maximumFileSizeToCacheInBytes: 5 * 1024 * 1024, // 5 MiB
         },
         devOptions: {
           enabled: true,
@@ -55,7 +61,7 @@ export default defineConfig(() => {
     ],
     resolve: {
       alias: {
-        '@': path.resolve(__dirname, '.'),
+        '@': path.resolve(import.meta.dirname, '.'),
       },
     },
     server: {

@@ -20,6 +20,8 @@ import {
 } from './utils/tennisEngine';
 import { initAuth } from './services/firebaseAuth';
 import { offlineSync } from './services/offlineSync';
+import { updateMatchSummarySheet } from './services/googleSheets';
+import { saveMatchToFirestore } from './services/firestore';
 import { sound } from './utils/soundEffects';
 
 import { LandscapeScoreboard } from './components/LandscapeScoreboard';
@@ -133,8 +135,11 @@ export default function App() {
     if (match.isFinished) {
       sound.playFanfare();
       setIsPostMatchOpen(true);
+      if (activeSheetId) {
+        updateMatchSummarySheet(activeSheetId, match).catch(console.error);
+      }
     }
-  }, [match.isFinished]);
+  }, [match.isFinished, activeSheetId, match]);
 
   // Handle Point Awarding
   const handleAwardPoint = async (
@@ -167,8 +172,9 @@ export default function App() {
 
     setMatch(updatedMatch);
 
-    // Save locally
+    // Save locally & Firestore
     offlineSync.saveMatchLocally(updatedMatch);
+    saveMatchToFirestore(updatedMatch, user?.uid);
 
     // Sync to Google Sheet if active
     if (activeSheetId) {
@@ -185,6 +191,7 @@ export default function App() {
     const previousMatch = undoLastPoint(match);
     setMatch(previousMatch);
     offlineSync.saveMatchLocally(previousMatch);
+    saveMatchToFirestore(previousMatch, user?.uid);
   };
 
   // 1st Serve Fault
@@ -201,6 +208,7 @@ export default function App() {
     const updated = registerSecondServeFault(match);
     setMatch(updated);
     offlineSync.saveMatchLocally(updated);
+    saveMatchToFirestore(updated, user?.uid);
 
     if (activeSheetId) {
       const lastPoint = updated.pointsHistory[updated.pointsHistory.length - 1];
@@ -238,6 +246,10 @@ export default function App() {
     updated = setServerTeam(updated, serverTeam);
     setMatch(updated);
     offlineSync.saveMatchLocally(updated);
+    saveMatchToFirestore(updated, user?.uid);
+    if (activeSheetId) {
+      updateMatchSummarySheet(activeSheetId, updated).catch(console.error);
+    }
   };
 
   // Start New Match
@@ -253,7 +265,11 @@ export default function App() {
     newMatch.currentServerTeam = initialServer;
     setMatch(newMatch);
     offlineSync.saveMatchLocally(newMatch);
+    saveMatchToFirestore(newMatch, user?.uid);
     setIsPostMatchOpen(false);
+    if (activeSheetId) {
+      updateMatchSummarySheet(activeSheetId, newMatch).catch(console.error);
+    }
   };
 
   // Reset Match to 0-0 with Current Players & Rules
@@ -266,7 +282,11 @@ export default function App() {
     newMatch.currentServerTeam = match.currentServerTeam;
     setMatch(newMatch);
     offlineSync.saveMatchLocally(newMatch);
+    saveMatchToFirestore(newMatch, user?.uid);
     setIsPostMatchOpen(false);
+    if (activeSheetId) {
+      updateMatchSummarySheet(activeSheetId, newMatch).catch(console.error);
+    }
   };
 
   return (

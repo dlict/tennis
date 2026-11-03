@@ -1,0 +1,40 @@
+{
+  "entities": {
+    "Match": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" },
+        "isFinished": { "type": "boolean" },
+        "userId": { "type": "string" },
+        "matchWinner": { "type": "string" },
+        "team1": { "type": "object" },
+        "team2": { "type": "object" },
+        "sets": { "type": "array" },
+        "currentGame": { "type": "object" },
+        "pointsHistory": { "type": "array" }
+      },
+      "required": ["id", "createdAt", "updatedAt", "isFinished"]
+    },
+    "PlayerRoster": {
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "players": { "type": "array" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["userId", "players", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/matches/{matchId}": {
+      "schema": "Match",
+      "description": "Tennis matches and point history"
+    },
+    "/rosters/{userId}": {
+      "schema": "PlayerRoster",
+      "description": "User saved player rosters"
+    }
+  }
+}
