@@ -86,6 +86,7 @@ export interface PointRecord {
   winnerTeam: 'team1' | 'team2';
   category: ShotCategory;
   stroke?: StrokeType;
+  winnerPlayerName?: string;
   
   // Detailed error tracking (who missed and with what stroke)
   errorTeam?: 'team1' | 'team2';

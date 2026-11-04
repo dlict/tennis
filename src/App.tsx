@@ -165,6 +165,7 @@ export default function App() {
     category: ShotCategory = 'regular_point',
     details?: {
       stroke?: StrokeType;
+      winnerPlayerName?: string;
       errorTeam?: 'team1' | 'team2';
       errorPlayerName?: string;
       errorStroke?: StrokeType;
@@ -181,6 +182,7 @@ export default function App() {
     const updatedMatch = recordPoint(match, winner, {
       category,
       stroke: details?.stroke,
+      winnerPlayerName: details?.winnerPlayerName,
       errorTeam: details?.errorTeam,
       errorPlayerName: details?.errorPlayerName,
       errorStroke: details?.errorStroke,

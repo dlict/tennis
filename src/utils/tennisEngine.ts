@@ -297,6 +297,7 @@ export function recordPoint(
   shotDetails: {
     category: ShotCategory;
     stroke?: StrokeType;
+    winnerPlayerName?: string;
     errorTeam?: 'team1' | 'team2';
     errorPlayerName?: string;
     errorStroke?: StrokeType;
@@ -481,6 +482,7 @@ export function recordPoint(
     winnerTeam: pointWinner,
     category: shotDetails.category,
     stroke: shotDetails.stroke,
+    winnerPlayerName: shotDetails.winnerPlayerName,
     errorTeam: shotDetails.errorTeam,
     errorPlayerName: shotDetails.errorPlayerName,
     errorStroke: shotDetails.errorStroke,
