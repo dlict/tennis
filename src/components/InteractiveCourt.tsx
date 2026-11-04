@@ -21,10 +21,18 @@ export const InteractiveCourt: React.FC<InteractiveCourtProps> = ({
   const totalGamesInSet = currentSet ? currentSet.team1Games + currentSet.team2Games : 0;
   const isOddGamesSum = totalGamesInSet % 2 === 1;
 
-  // Ends swap automatically when games sum in current set is odd
-  // Even games: Team 1 is Left, Team 2 is Right
-  // Odd games: Team 2 is Left, Team 1 is Right
-  const isTeam1Left = !isOddGamesSum;
+  // Ends swap automatically when games sum in current set is odd,
+  // and in tiebreak, ends additionally swap every 6 points (6, 12, 18...)
+  let isSwapped = isOddGamesSum;
+  if (currentGame.isTiebreak) {
+    const tbPoints = currentGame.team1Points + currentGame.team2Points;
+    const tbSwaps = Math.floor(tbPoints / 6);
+    if (tbSwaps % 2 === 1) {
+      isSwapped = !isSwapped;
+    }
+  }
+
+  const isTeam1Left = !isSwapped;
   const isServerT1 = currentServerTeam === 'team1';
   const isServerOnLeft = isServerT1 ? isTeam1Left : !isTeam1Left;
 

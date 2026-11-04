@@ -3,6 +3,7 @@ import { appendPointToSheet, updateMatchSummarySheet } from './googleSheets';
 
 const QUEUE_STORAGE_KEY = 'tennispro_offline_queue_v1';
 const CURRENT_MATCH_KEY = 'tennispro_saved_match_v1';
+const SYNCED_POINTS_KEY = 'tennispro_synced_point_ids_v1';
 
 export interface QueuedPointItem {
   spreadsheetId: string;
@@ -13,12 +14,15 @@ export interface QueuedPointItem {
 
 class OfflineSyncManager {
   private queue: QueuedPointItem[] = [];
+  private syncedPointIds: Set<string> = new Set();
   private isSyncing = false;
   private listeners: Array<() => void> = [];
   private lastSuccessfulSyncTime: number | null = null;
 
   constructor() {
     this.loadQueue();
+    this.loadSyncedPointIds();
+
     if (typeof window !== 'undefined') {
       window.addEventListener('online', () => {
         console.log('Network online detected. Triggering queue auto-sync...');
@@ -53,6 +57,40 @@ class OfflineSyncManager {
     } catch (e) {
       console.warn('Failed to save offline queue:', e);
     }
+  }
+
+  private loadSyncedPointIds() {
+    try {
+      const saved = localStorage.getItem(SYNCED_POINTS_KEY);
+      if (saved) {
+        const arr = JSON.parse(saved);
+        this.syncedPointIds = new Set(arr);
+      }
+    } catch (e) {
+      console.warn('Failed to load synced point ids:', e);
+      this.syncedPointIds = new Set();
+    }
+  }
+
+  private saveSyncedPointIds() {
+    try {
+      // Keep only last 2000 points to prevent storage bloat
+      const arr = Array.from(this.syncedPointIds).slice(-2000);
+      localStorage.setItem(SYNCED_POINTS_KEY, JSON.stringify(arr));
+    } catch (e) {
+      console.warn('Failed to save synced point ids:', e);
+    }
+  }
+
+  public clearSyncedPointIds() {
+    this.syncedPointIds.clear();
+    try {
+      localStorage.removeItem(SYNCED_POINTS_KEY);
+    } catch {}
+  }
+
+  public isPointSynced(pointId: string): boolean {
+    return this.syncedPointIds.has(pointId);
   }
 
   public subscribe(cb: () => void) {
@@ -105,7 +143,7 @@ class OfflineSyncManager {
   }
 
   /**
-   * Enqueue a point to be synced or sync immediately if online
+   * Enqueue a point to be synced or sync immediately if online with Idempotency
    */
   public async queuePoint(spreadsheetId: string, point: PointRecord, match: MatchState) {
     this.saveMatchLocally(match);
@@ -122,14 +160,19 @@ class OfflineSyncManager {
       return;
     }
 
-    // Attempt live sync
+    // Attempt live sync with idempotency check
     try {
-      await appendPointToSheet(spreadsheetId, point, match);
+      if (!this.syncedPointIds.has(point.id)) {
+        await appendPointToSheet(spreadsheetId, point, match);
+        this.syncedPointIds.add(point.id);
+        this.saveSyncedPointIds();
+      }
+
       await updateMatchSummarySheet(spreadsheetId, match);
       this.lastSuccessfulSyncTime = Date.now();
       this.notify();
     } catch (err) {
-      console.warn('Live sync failed, adding to offline retry queue:', err);
+      console.warn('Live sync failed or partial, adding to offline retry queue:', err);
       this.queue.push({
         spreadsheetId,
         point,
@@ -141,7 +184,7 @@ class OfflineSyncManager {
   }
 
   /**
-   * Process all queued items when online
+   * Process all queued items when online (idempotent, never duplicates points)
    */
   public async processQueue(): Promise<boolean> {
     if (this.isSyncing || this.queue.length === 0 || !navigator.onLine) {
@@ -154,13 +197,20 @@ class OfflineSyncManager {
     try {
       while (this.queue.length > 0) {
         const item = this.queue[0];
-        await appendPointToSheet(item.spreadsheetId, item.point, item.matchSnapshot);
-        // Remove item once succeeded
+        
+        // Idempotency: only append if not already recorded in Google Sheet
+        if (!this.syncedPointIds.has(item.point.id)) {
+          await appendPointToSheet(item.spreadsheetId, item.point, item.matchSnapshot);
+          this.syncedPointIds.add(item.point.id);
+          this.saveSyncedPointIds();
+        }
+
+        // Successfully written or was already written, safe to dequeue
         this.queue.shift();
         this.saveQueue();
       }
 
-      // Final summary sync of latest state
+      // Final summary sync of latest state once queue is emptied
       const savedMatch = this.getLocallySavedMatch();
       const targetSheetId = localStorage.getItem('tennispro_active_sheet_id');
       if (savedMatch && targetSheetId) {

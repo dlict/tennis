@@ -13,8 +13,10 @@ import {
   createInitialMatch,
   recordPoint,
   undoLastPoint,
+  redoLastPoint,
   registerFirstServeFault,
   registerSecondServeFault,
+  resetServeFault,
   setServerTeam,
   updatePlayerNames,
 } from './utils/tennisEngine';
@@ -54,7 +56,12 @@ export default function App() {
           ...p,
           name: checkMock(p.name) ? (i === 0 ? 'ฝ่ายที่ 2' : 'คู่หู 2') : p.name,
         }));
+        saved.team1ServerPlayerIndex = saved.team1ServerPlayerIndex ?? 0;
+        saved.team2ServerPlayerIndex = saved.team2ServerPlayerIndex ?? 0;
         offlineSync.saveMatchLocally(saved);
+      } else {
+        saved.team1ServerPlayerIndex = saved.team1ServerPlayerIndex ?? 0;
+        saved.team2ServerPlayerIndex = saved.team2ServerPlayerIndex ?? 0;
       }
       return saved;
     }
@@ -214,12 +221,22 @@ export default function App() {
     saveMatchToFirestore(previousMatch, user?.uid);
   };
 
+  // Redo Last Point
+  const handleRedo = () => {
+    if (!match.redoStack || match.redoStack.length === 0) return;
+    const nextMatch = redoLastPoint(match);
+    setMatch(nextMatch);
+    offlineSync.saveMatchLocally(nextMatch);
+    saveMatchToFirestore(nextMatch, user?.uid);
+  };
+
   // 1st Serve Fault
   const handleFirstServeFault = () => {
     sound.playFault();
     const updated = registerFirstServeFault(match);
     setMatch(updated);
     offlineSync.saveMatchLocally(updated);
+    saveMatchToFirestore(updated, user?.uid);
   };
 
   // 2nd Serve Fault (Double Fault -> awards point to opponent!)
@@ -238,12 +255,12 @@ export default function App() {
     }
   };
 
-  // Reset 1st Serve Fault (Let / Re-serve)
+  // Reset 1st Serve Fault (Let / Re-serve) - persists to LocalStorage and Firestore immediately!
   const handleResetServeFault = () => {
-    setMatch((prev) => ({
-      ...prev,
-      isFirstServeFault: false,
-    }));
+    const updated = resetServeFault(match);
+    setMatch(updated);
+    offlineSync.saveMatchLocally(updated);
+    saveMatchToFirestore(updated, user?.uid);
   };
 
   // Toggle Server
@@ -252,6 +269,7 @@ export default function App() {
     const updated = setServerTeam(match, nextServer);
     setMatch(updated);
     offlineSync.saveMatchLocally(updated);
+    saveMatchToFirestore(updated, user?.uid);
   };
 
   // Save Player Names & Server
@@ -281,6 +299,7 @@ export default function App() {
     t2DoublesPartner?: string,
     initialServer: 'team1' | 'team2' = 'team1'
   ) => {
+    offlineSync.clearSyncedPointIds();
     const newMatch = createInitialMatch(settings, t1Name, t2Name, t1DoublesPartner, t2DoublesPartner);
     newMatch.currentServerTeam = initialServer;
     setMatch(newMatch);
@@ -294,6 +313,7 @@ export default function App() {
 
   // Reset Match to 0-0 with Current Players & Rules
   const handleResetCurrentMatch = () => {
+    offlineSync.clearSyncedPointIds();
     const t1Name = match.team1.players[0]?.name || match.team1.name;
     const t2Name = match.team2.players[0]?.name || match.team2.name;
     const t1Partner = match.team1.players[1]?.name;
@@ -336,6 +356,8 @@ export default function App() {
         onOpenDetailModal={(mode, team) => setDetailModal({ isOpen: true, mode, team })}
         onOpenEditPlayers={() => setIsEditPlayersOpen(true)}
         onUndo={handleUndo}
+        onRedo={handleRedo}
+        canRedo={Boolean(match.redoStack && match.redoStack.length > 0)}
         onFirstServeFault={handleFirstServeFault}
         onSecondServeFault={handleSecondServeFault}
         onResetServeFault={handleResetServeFault}

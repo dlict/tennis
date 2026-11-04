@@ -242,7 +242,7 @@ export async function appendPointToSheet(
 
   const row = formatPointRow(point, match);
 
-  await fetch(
+  const res = await fetch(
     `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/บันทึกแต้มเรียลไทม์!A:N:append?valueInputOption=USER_ENTERED`,
     {
       method: 'POST',
@@ -255,6 +255,11 @@ export async function appendPointToSheet(
       }),
     }
   );
+
+  if (!res.ok) {
+    const errorText = await res.text();
+    throw new Error(`บันทึกแต้มลง Google Sheets ไม่สำเร็จ (${res.status}): ${errorText}`);
+  }
 }
 
 /**
@@ -287,7 +292,7 @@ export async function syncAllPointsToSheet(
 
   // 2. Write all point rows in one batch
   if (rows.length > 0) {
-    await fetch(
+    const res = await fetch(
       `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/บันทึกแต้มเรียลไทม์!A2:N${rows.length + 1}?valueInputOption=USER_ENTERED`,
       {
         method: 'PUT',
@@ -300,6 +305,10 @@ export async function syncAllPointsToSheet(
         }),
       }
     );
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`Sync all points failed (${res.status}): ${err}`);
+    }
   }
 
   // 3. Update summary and stats tabs
@@ -385,7 +394,7 @@ export async function updateMatchSummarySheet(
     ['อัปเดตล่าสุด:', new Date().toLocaleTimeString('th-TH')],
   ];
 
-  await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values:batchUpdate`, {
+  const updateRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values:batchUpdate`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,
@@ -405,4 +414,9 @@ export async function updateMatchSummarySheet(
       ],
     }),
   });
+
+  if (!updateRes.ok) {
+    const errorBody = await updateRes.text();
+    throw new Error(`อัปเดตหน้าสรุปสถิติ Google Sheet ล้มเหลว (${updateRes.status}): ${errorBody}`);
+  }
 }

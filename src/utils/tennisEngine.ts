@@ -1,9 +1,11 @@
 import {
+  DoublesRotation,
   ErrorDetail,
   GameScore,
   MatchFormat,
   MatchSettings,
   MatchState,
+  MatchStateSnapshot,
   PointRecord,
   SetScore,
   ShotCategory,
@@ -12,7 +14,12 @@ import {
   TeamStats,
 } from '../types/tennis';
 
-export function createInitialGameScore(isTiebreak = false, pointsToWin = 7): GameScore {
+export function createInitialGameScore(
+  isTiebreak = false,
+  pointsToWin = 7,
+  tiebreakInitialServerTeam?: 'team1' | 'team2',
+  tiebreakInitialServerPlayerIndex?: number
+): GameScore {
   return {
     team1Points: 0,
     team2Points: 0,
@@ -21,6 +28,49 @@ export function createInitialGameScore(isTiebreak = false, pointsToWin = 7): Gam
     isDeuce: false,
     isTiebreak,
     tiebreakPointsToWin: pointsToWin,
+    tiebreakInitialServerTeam,
+    tiebreakInitialServerPlayerIndex,
+  };
+}
+
+/**
+ * Initialize or re-index doubles serving rotation
+ */
+export function initDoublesRotation(
+  team1Players: Array<{ id: string; name: string }>,
+  team2Players: Array<{ id: string; name: string }>,
+  firstServerTeam: 'team1' | 'team2' = 'team1',
+  t1FirstServerId?: string,
+  t2FirstServerId?: string
+): DoublesRotation {
+  const p1 = team1Players[0]?.id || 'p1_1';
+  const p2 = team1Players[1]?.id || 'p1_2';
+  const p3 = team2Players[0]?.id || 'p2_1';
+  const p4 = team2Players[1]?.id || 'p2_2';
+
+  const t1First = t1FirstServerId === p2 ? p2 : p1;
+  const t1Second = t1First === p1 ? p2 : p1;
+
+  const t2First = t2FirstServerId === p4 ? p4 : p3;
+  const t2Second = t2First === p3 ? p4 : p3;
+
+  // 4-player rotation order:
+  // If team1 serves first: [t1First, t2First, t1Second, t2Second]
+  // If team2 serves first: [t2First, t1First, t2Second, t1Second]
+  const serviceOrder =
+    firstServerTeam === 'team1'
+      ? [t1First, t2First, t1Second, t2Second]
+      : [t2First, t1First, t2Second, t1Second];
+
+  return {
+    serviceOrder,
+    nextServerIndex: 0,
+    receivingPositions: {
+      team1Deuce: t1First,
+      team1Ad: t1Second,
+      team2Deuce: t2First,
+      team2Ad: t2Second,
+    },
   };
 }
 
@@ -39,6 +89,24 @@ export function createInitialMatch(
     team2Games: 0,
   }));
 
+  const t1Players = isDoubles
+    ? [
+        { id: 'p1_1', name: team1Name, shortName: team1Name.slice(0, 3).toUpperCase() },
+        { id: 'p1_2', name: team1DoublesPartner || 'คู่หู 1', shortName: (team1DoublesPartner || 'คู่หู 1').slice(0, 3).toUpperCase() },
+      ]
+    : [{ id: 'p1_1', name: team1Name, shortName: team1Name.slice(0, 4).toUpperCase() }];
+
+  const t2Players = isDoubles
+    ? [
+        { id: 'p2_1', name: team2Name, shortName: team2Name.slice(0, 3).toUpperCase() },
+        { id: 'p2_2', name: team2DoublesPartner || 'คู่หู 2', shortName: (team2DoublesPartner || 'คู่หู 2').slice(0, 3).toUpperCase() },
+      ]
+    : [{ id: 'p2_1', name: team2Name, shortName: team2Name.slice(0, 4).toUpperCase() }];
+
+  const doublesRotation = isDoubles
+    ? initDoublesRotation(t1Players, t2Players, 'team1')
+    : undefined;
+
   return {
     id: `match_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
     createdAt: Date.now(),
@@ -48,31 +116,27 @@ export function createInitialMatch(
     team1: {
       id: 'team1',
       name: team1Name,
-      players: isDoubles
-        ? [
-            { id: 'p1_1', name: team1Name, shortName: team1Name.slice(0, 3).toUpperCase() },
-            { id: 'p1_2', name: team1DoublesPartner || 'คู่หู 1', shortName: (team1DoublesPartner || 'คู่หู 1').slice(0, 3).toUpperCase() },
-          ]
-        : [{ id: 'p1_1', name: team1Name, shortName: team1Name.slice(0, 4).toUpperCase() }],
+      players: t1Players,
     },
     team2: {
       id: 'team2',
       name: team2Name,
-      players: isDoubles
-        ? [
-            { id: 'p2_1', name: team2Name, shortName: team2Name.slice(0, 3).toUpperCase() },
-            { id: 'p2_2', name: team2DoublesPartner || 'คู่หู 2', shortName: (team2DoublesPartner || 'คู่หู 2').slice(0, 3).toUpperCase() },
-          ]
-        : [{ id: 'p2_1', name: team2Name, shortName: team2Name.slice(0, 4).toUpperCase() }],
+      players: t2Players,
     },
     currentSetIndex: 0,
     sets: initialSets,
     currentGame: createInitialGameScore(),
     currentServerTeam: 'team1',
     currentServerPlayerIndex: 0,
+    team1ServerPlayerIndex: 0,
+    team2ServerPlayerIndex: 0,
     currentReceiverPlayerIndex: 0,
+    doublesRotation,
     isFirstServeFault: false,
     pointsHistory: [],
+    redoStack: [],
+    schemaVersion: 2,
+    activeRecordingMode: 'detailed',
   };
 }
 
@@ -118,21 +182,341 @@ export function getCurrentServeCourt(currentGame: GameScore): 'deuce' | 'ad' {
 }
 
 /**
+ * Calculate the active server and court for any tiebreak score
+ * ตามกติกา ITF:
+ * แต้ม 1 (คะแนนรวมก่อนเสิร์ฟ = 0): ผู้เริ่มเสิร์ฟ เสิร์ฟ 1 แต้มจากฝั่งขวา (Deuce)
+ * แต้ม 2-3 (คะแนนรวม = 1, 2): อีกฝ่าย เสิร์ฟ 2 แต้ม (แต้มแรกเสิร์ฟจากฝั่งซ้าย Ad, แต้มสองเสิร์ฟจากฝั่งขวา Deuce)
+ * แต้ม 4-5 (คะแนนรวม = 3, 4): ฝ่ายแรก เสิร์ฟ 2 แต้ม (Ad แล้ว Deuce)
+ * ลำดับการเสิร์ฟหมุน 1-2-2-2...
+ * สำหรับ Doubles: หมุนเวียนผู้เล่นครบ 4 คนตามลำดับ T1P1 -> T2P1 -> T1P2 -> T2P2 (หรือตามลำดับผู้เริ่มเสิร์ฟ)
+ */
+export function getTiebreakServerInfo(
+  initialServerTeam: 'team1' | 'team2',
+  initialServerPlayerIndex: number,
+  tiebreakPointsSum: number,
+  isDoubles: boolean,
+  t1BasePlayerIndex = 0,
+  t2BasePlayerIndex = 0
+): {
+  serverTeam: 'team1' | 'team2';
+  serverPlayerIndex: number;
+  court: 'deuce' | 'ad';
+} {
+  const otherTeam: 'team1' | 'team2' = initialServerTeam === 'team1' ? 'team2' : 'team1';
+  const court: 'deuce' | 'ad' = tiebreakPointsSum % 2 === 0 ? 'deuce' : 'ad';
+  const turnIndex = tiebreakPointsSum === 0 ? 0 : Math.floor((tiebreakPointsSum + 1) / 2);
+
+  if (!isDoubles) {
+    const isInitial = turnIndex % 2 === 0;
+    return {
+      serverTeam: isInitial ? initialServerTeam : otherTeam,
+      serverPlayerIndex: 0,
+      court,
+    };
+  }
+
+  // Doubles 4-turn rotation cycle:
+  // Turn 0: initialServerTeam, initial player
+  // Turn 1: otherTeam, initial player of other team
+  // Turn 2: initialServerTeam, partner (other player)
+  // Turn 3: otherTeam, partner (other player)
+  const turnInCycle = turnIndex % 4;
+  const initialTeamInitialPlayer = initialServerTeam === 'team1' ? t1BasePlayerIndex : t2BasePlayerIndex;
+  const otherTeamInitialPlayer = initialServerTeam === 'team1' ? t2BasePlayerIndex : t1BasePlayerIndex;
+
+  let serverTeam: 'team1' | 'team2';
+  let serverPlayerIndex: number;
+
+  if (turnInCycle === 0) {
+    serverTeam = initialServerTeam;
+    serverPlayerIndex = initialTeamInitialPlayer;
+  } else if (turnInCycle === 1) {
+    serverTeam = otherTeam;
+    serverPlayerIndex = otherTeamInitialPlayer;
+  } else if (turnInCycle === 2) {
+    serverTeam = initialServerTeam;
+    serverPlayerIndex = (initialTeamInitialPlayer + 1) % 2;
+  } else {
+    serverTeam = otherTeam;
+    serverPlayerIndex = (otherTeamInitialPlayer + 1) % 2;
+  }
+
+  return {
+    serverTeam,
+    serverPlayerIndex,
+    court,
+  };
+}
+
+/**
  * Check if the active server in a tiebreak should change
  */
 export function getTiebreakServerTeam(
   initialServerTeam: 'team1' | 'team2',
   tiebreakPointsSum: number
 ): 'team1' | 'team2' {
-  // Tiebreak serve order:
-  // Point 1: initialServer
-  // Point 2-3: otherServer
-  // Point 4-5: initialServer
-  // Point 6-7: otherServer
-  // math: floor((pointsSum + 1) / 2) % 2 === 0 -> otherServer, else initialServer
-  const cycle = Math.floor((tiebreakPointsSum + 1) / 2) % 2;
-  const otherTeam: 'team1' | 'team2' = initialServerTeam === 'team1' ? 'team2' : 'team1';
-  return cycle === 0 ? otherTeam : initialServerTeam;
+  const turnIndex = tiebreakPointsSum === 0 ? 0 : Math.floor((tiebreakPointsSum + 1) / 2);
+  const isInitial = turnIndex % 2 === 0;
+  return isInitial ? initialServerTeam : initialServerTeam === 'team1' ? 'team2' : 'team1';
+}
+
+export const getTiebreakServer = getTiebreakServerInfo;
+
+/**
+ * Get current serving player info (team, index, id, name)
+ */
+export function getCurrentServer(state: MatchState): {
+  team: 'team1' | 'team2';
+  playerIndex: number;
+  playerId: string;
+  playerName: string;
+} {
+  const team = state.currentServerTeam;
+  const playerIndex = state.currentServerPlayerIndex;
+  const player = state[team].players[playerIndex] || state[team].players[0];
+  return {
+    team,
+    playerIndex,
+    playerId: player?.id || `${team}_p${playerIndex + 1}`,
+    playerName: player?.name || state[team].name,
+  };
+}
+
+/**
+ * Get current receiving player info based on serve court (Deuce/Ad) and doubles receiving positions
+ */
+export function getCurrentReceiver(state: MatchState): {
+  team: 'team1' | 'team2';
+  playerIndex: number;
+  playerId: string;
+  playerName: string;
+} {
+  const receivingTeam = state.currentServerTeam === 'team1' ? 'team2' : 'team1';
+  const serveCourt = getCurrentServeCourt(state.currentGame);
+
+  if (state.settings.type !== 'doubles' || state[receivingTeam].players.length <= 1) {
+    const player = state[receivingTeam].players[0];
+    return {
+      team: receivingTeam,
+      playerIndex: 0,
+      playerId: player?.id || `${receivingTeam}_p1`,
+      playerName: player?.name || state[receivingTeam].name,
+    };
+  }
+
+  // Doubles receiver position from doublesRotation if configured
+  const rotation = state.doublesRotation;
+  if (rotation && rotation.receivingPositions) {
+    const targetPlayerId =
+      receivingTeam === 'team1'
+        ? serveCourt === 'deuce'
+          ? rotation.receivingPositions.team1Deuce
+          : rotation.receivingPositions.team1Ad
+        : serveCourt === 'deuce'
+        ? rotation.receivingPositions.team2Deuce
+        : rotation.receivingPositions.team2Ad;
+
+    const foundIdx = state[receivingTeam].players.findIndex((p) => p.id === targetPlayerId);
+    const playerIndex = foundIdx >= 0 ? foundIdx : serveCourt === 'deuce' ? 0 : 1;
+    const player = state[receivingTeam].players[playerIndex] || state[receivingTeam].players[0];
+
+    return {
+      team: receivingTeam,
+      playerIndex,
+      playerId: player?.id || targetPlayerId,
+      playerName: player?.name || state[receivingTeam].name,
+    };
+  }
+
+  // Default doubles: 0 receives on Deuce court, 1 receives on Ad court
+  const playerIndex = serveCourt === 'deuce' ? 0 : 1;
+  const player = state[receivingTeam].players[playerIndex] || state[receivingTeam].players[0];
+  return {
+    team: receivingTeam,
+    playerIndex,
+    playerId: player?.id || `${receivingTeam}_p${playerIndex + 1}`,
+    playerName: player?.name || state[receivingTeam].name,
+  };
+}
+
+/**
+ * Calculate next game score and determine if game was won
+ */
+export function getNextGameState(
+  currentGame: GameScore,
+  pointWinner: 'team1' | 'team2',
+  adRule: 'advantage' | 'no-ad'
+): {
+  newGameScore: GameScore;
+  gameWonBy: 'team1' | 'team2' | null;
+} {
+  let newT1GamePts = currentGame.team1Points;
+  let newT2GamePts = currentGame.team2Points;
+
+  if (pointWinner === 'team1') {
+    newT1GamePts++;
+  } else {
+    newT2GamePts++;
+  }
+
+  let gameWonBy: 'team1' | 'team2' | null = null;
+  let newGameScore: GameScore = { ...currentGame };
+
+  if (currentGame.isTiebreak) {
+    const minPts = currentGame.tiebreakPointsToWin;
+    const diff = Math.abs(newT1GamePts - newT2GamePts);
+
+    newGameScore = {
+      ...currentGame,
+      team1Points: newT1GamePts,
+      team2Points: newT2GamePts,
+      team1Display: String(newT1GamePts),
+      team2Display: String(newT2GamePts),
+    };
+
+    if ((newT1GamePts >= minPts || newT2GamePts >= minPts) && diff >= 2) {
+      gameWonBy = newT1GamePts > newT2GamePts ? 'team1' : 'team2';
+    }
+  } else {
+    if (adRule === 'no-ad') {
+      if (newT1GamePts >= 4 && newT1GamePts > newT2GamePts) {
+        gameWonBy = 'team1';
+      } else if (newT2GamePts >= 4 && newT2GamePts > newT1GamePts) {
+        gameWonBy = 'team2';
+      } else {
+        const fmt = formatStandardGameScore(newT1GamePts, newT2GamePts, 'no-ad');
+        newGameScore = {
+          ...currentGame,
+          team1Points: newT1GamePts,
+          team2Points: newT2GamePts,
+          team1Display: fmt.team1,
+          team2Display: fmt.team2,
+          isDeuce: fmt.isDeuce,
+        };
+      }
+    } else {
+      if (newT1GamePts >= 4 && newT1GamePts - newT2GamePts >= 2) {
+        gameWonBy = 'team1';
+      } else if (newT2GamePts >= 4 && newT2GamePts - newT1GamePts >= 2) {
+        gameWonBy = 'team2';
+      } else {
+        const fmt = formatStandardGameScore(newT1GamePts, newT2GamePts, 'advantage');
+        newGameScore = {
+          ...currentGame,
+          team1Points: newT1GamePts,
+          team2Points: newT2GamePts,
+          team1Display: fmt.team1,
+          team2Display: fmt.team2,
+          isDeuce: fmt.isDeuce,
+        };
+      }
+    }
+  }
+
+  return { newGameScore, gameWonBy };
+}
+
+/**
+ * Calculate next sets and determine if set or match was won
+ */
+export function getNextSetState(
+  sets: SetScore[],
+  currentSetIndex: number,
+  gameWonBy: 'team1' | 'team2',
+  isTiebreakGame: boolean,
+  tiebreakT1Pts: number,
+  tiebreakT2Pts: number,
+  format: MatchFormat,
+  finalSetTiebreak: 'standard' | 'super'
+): {
+  newSets: SetScore[];
+  newCurrentSetIndex: number;
+  setWonBy: 'team1' | 'team2' | null;
+  isMatchFinished: boolean;
+  matchWinner?: 'team1' | 'team2';
+  isNextGameTiebreak: boolean;
+  isNextGameSuperTiebreak: boolean;
+} {
+  const setsToWin = getSetsToWin(format);
+  const gamesToWinSet = format === 'pro8' ? 8 : 6;
+  const newSets = sets.map((s, idx) => (idx === currentSetIndex ? { ...s } : s));
+  const currentSet = newSets[currentSetIndex];
+
+  let setWonBy: 'team1' | 'team2' | null = null;
+  let isNextGameTiebreak = false;
+  let isNextGameSuperTiebreak = false;
+
+  if (isTiebreakGame) {
+    if (gameWonBy === 'team1') {
+      currentSet.team1Games += 1;
+      currentSet.team1TiebreakPoints = tiebreakT1Pts;
+      currentSet.team2TiebreakPoints = tiebreakT2Pts;
+      currentSet.winner = 'team1';
+      setWonBy = 'team1';
+    } else {
+      currentSet.team2Games += 1;
+      currentSet.team1TiebreakPoints = tiebreakT1Pts;
+      currentSet.team2TiebreakPoints = tiebreakT2Pts;
+      currentSet.winner = 'team2';
+      setWonBy = 'team2';
+    }
+  } else {
+    if (gameWonBy === 'team1') {
+      currentSet.team1Games += 1;
+    } else {
+      currentSet.team2Games += 1;
+    }
+
+    const t1G = currentSet.team1Games;
+    const t2G = currentSet.team2Games;
+    const diffG = Math.abs(t1G - t2G);
+
+    if ((t1G >= gamesToWinSet || t2G >= gamesToWinSet) && diffG >= 2) {
+      currentSet.winner = t1G > t2G ? 'team1' : 'team2';
+      setWonBy = currentSet.winner;
+    } else if (t1G === gamesToWinSet && t2G === gamesToWinSet) {
+      isNextGameTiebreak = true;
+      isNextGameSuperTiebreak =
+        finalSetTiebreak === 'super' &&
+        currentSetIndex === (format === '3sets' ? 2 : 4);
+    }
+  }
+
+  let newCurrentSetIndex = currentSetIndex;
+  let isMatchFinished = false;
+  let matchWinner: 'team1' | 'team2' | undefined;
+
+  if (setWonBy) {
+    const t1SetsWon = newSets.filter((s) => s.winner === 'team1').length;
+    const t2SetsWon = newSets.filter((s) => s.winner === 'team2').length;
+
+    if (t1SetsWon >= setsToWin) {
+      isMatchFinished = true;
+      matchWinner = 'team1';
+    } else if (t2SetsWon >= setsToWin) {
+      isMatchFinished = true;
+      matchWinner = 'team2';
+    } else {
+      newCurrentSetIndex = currentSetIndex + 1;
+      if (
+        finalSetTiebreak === 'super' &&
+        newCurrentSetIndex === (format === '3sets' ? 2 : 4)
+      ) {
+        isNextGameTiebreak = true;
+        isNextGameSuperTiebreak = true;
+      }
+    }
+  }
+
+  return {
+    newSets,
+    newCurrentSetIndex,
+    setWonBy,
+    isMatchFinished,
+    matchWinner,
+    isNextGameTiebreak,
+    isNextGameSuperTiebreak,
+  };
 }
 
 /**
@@ -288,23 +672,28 @@ export function detectPointContext(state: MatchState): PointContextResult {
   };
 }
 
+export interface RecordPointShotDetails {
+  category: ShotCategory;
+  stroke?: StrokeType;
+  winnerPlayerId?: string;
+  winnerPlayerName?: string;
+  errorTeam?: 'team1' | 'team2';
+  errorPlayerId?: string;
+  errorPlayerName?: string;
+  errorStroke?: StrokeType;
+  errorDetail?: ErrorDetail;
+  courtZone?: any;
+  rallyLength?: number;
+  recordingMode?: 'quick' | 'detailed';
+}
+
 /**
  * Score a point for team1 or team2
  */
 export function recordPoint(
   state: MatchState,
   pointWinner: 'team1' | 'team2',
-  shotDetails: {
-    category: ShotCategory;
-    stroke?: StrokeType;
-    winnerPlayerName?: string;
-    errorTeam?: 'team1' | 'team2';
-    errorPlayerName?: string;
-    errorStroke?: StrokeType;
-    errorDetail?: ErrorDetail;
-    courtZone?: any;
-    rallyLength?: number;
-  }
+  shotDetails: RecordPointShotDetails
 ): MatchState {
   if (state.isFinished) return state;
 
@@ -313,8 +702,29 @@ export function recordPoint(
   const setsToWin = getSetsToWin(state.settings.format);
   const gamesToWinSet = state.settings.format === 'pro8' ? 8 : 6;
 
+  // Lossless snapshot before point for 100% accurate Undo restoration
+  const stateSnapshotBefore: MatchStateSnapshot = {
+    currentSetIndex: state.currentSetIndex,
+    sets: state.sets.map((s) => ({ ...s })),
+    currentGame: { ...state.currentGame },
+    currentServerTeam: state.currentServerTeam,
+    currentServerPlayerIndex: state.currentServerPlayerIndex,
+    team1ServerPlayerIndex: state.team1ServerPlayerIndex ?? 0,
+    team2ServerPlayerIndex: state.team2ServerPlayerIndex ?? 0,
+    currentReceiverPlayerIndex: state.currentReceiverPlayerIndex ?? 0,
+    doublesRotation: state.doublesRotation
+      ? JSON.parse(JSON.stringify(state.doublesRotation))
+      : undefined,
+    isFirstServeFault: state.isFirstServeFault,
+    isFinished: state.isFinished,
+    matchWinner: state.matchWinner,
+    timestamp: Date.now(),
+  };
+
   const pointContext = detectPointContext(state);
   const serveCourt = getCurrentServeCourt(currentGame);
+  const servingInfo = getCurrentServer(state);
+  const receivingInfo = getCurrentReceiver(state);
 
   // Snapshot before point for point history
   const scoreBefore = {
@@ -334,9 +744,26 @@ export function recordPoint(
   let gameWonBy: 'team1' | 'team2' | null = null;
   let newGameScore: GameScore = { ...currentGame };
 
+  // Server tracking for doubles & rotation
+  let nextT1ServerPlayerIndex = state.team1ServerPlayerIndex ?? 0;
+  let nextT2ServerPlayerIndex = state.team2ServerPlayerIndex ?? 0;
+  let nextServerTeam = state.currentServerTeam;
+  let nextServerPlayerIndex = state.currentServerPlayerIndex;
+  let nextDoublesRotation = state.doublesRotation
+    ? {
+        ...state.doublesRotation,
+        serviceOrder: [...state.doublesRotation.serviceOrder],
+        receivingPositions: { ...state.doublesRotation.receivingPositions },
+      }
+    : undefined;
+
   if (currentGame.isTiebreak) {
     const minPts = currentGame.tiebreakPointsToWin;
     const diff = Math.abs(newT1GamePts - newT2GamePts);
+
+    const tiebreakInitTeam = currentGame.tiebreakInitialServerTeam || state.currentServerTeam;
+    const tiebreakInitPlayer =
+      currentGame.tiebreakInitialServerPlayerIndex ?? state.currentServerPlayerIndex;
 
     newGameScore = {
       ...currentGame,
@@ -344,10 +771,26 @@ export function recordPoint(
       team2Points: newT2GamePts,
       team1Display: String(newT1GamePts),
       team2Display: String(newT2GamePts),
+      tiebreakInitialServerTeam: tiebreakInitTeam,
+      tiebreakInitialServerPlayerIndex: tiebreakInitPlayer,
     };
 
     if ((newT1GamePts >= minPts || newT2GamePts >= minPts) && diff >= 2) {
       gameWonBy = newT1GamePts > newT2GamePts ? 'team1' : 'team2';
+    } else {
+      // Still in Tiebreak: Automatically rotate server according to 1-2-2 ITF rules & doubles rotation!
+      const totalPointsAfter = newT1GamePts + newT2GamePts;
+      const isDoubles = state.settings.type === 'doubles';
+      const tbServerInfo = getTiebreakServerInfo(
+        tiebreakInitTeam,
+        tiebreakInitPlayer,
+        totalPointsAfter,
+        isDoubles,
+        state.team1ServerPlayerIndex ?? 0,
+        state.team2ServerPlayerIndex ?? 0
+      );
+      nextServerTeam = tbServerInfo.serverTeam;
+      nextServerPlayerIndex = tbServerInfo.serverPlayerIndex;
     }
   } else {
     // Standard game logic
@@ -390,8 +833,6 @@ export function recordPoint(
   // Update sets and games if game is won
   let newSets = state.sets.map((s, idx) => (idx === state.currentSetIndex ? { ...s } : s));
   let newCurrentSetIndex = state.currentSetIndex;
-  let nextServerTeam = state.currentServerTeam;
-  let nextServerPlayerIndex = state.currentServerPlayerIndex;
   let isMatchFinished = false;
   let matchWinner: 'team1' | 'team2' | undefined;
 
@@ -408,11 +849,57 @@ export function recordPoint(
         currentSet.team2TiebreakPoints = newT2GamePts;
         currentSet.winner = 'team2';
       }
+
+      // ITF Rule: The team/player who served first in tiebreak receives in the 1st game of next set!
+      const tbInit = currentGame.tiebreakInitialServerTeam || state.currentServerTeam;
+      nextServerTeam = tbInit === 'team1' ? 'team2' : 'team1';
+      if (state.settings.type === 'doubles' && nextDoublesRotation) {
+        nextServerPlayerIndex =
+          nextServerTeam === 'team1' ? nextT1ServerPlayerIndex : nextT2ServerPlayerIndex;
+      } else {
+        nextServerPlayerIndex = 0;
+      }
     } else {
       if (gameWonBy === 'team1') {
         currentSet.team1Games += 1;
       } else {
         currentSet.team2Games += 1;
+      }
+
+      // In Doubles: Rotate the serving player and advance the 4-player cycle
+      if (state.settings.type === 'doubles') {
+        if (state.currentServerTeam === 'team1') {
+          nextT1ServerPlayerIndex = ((state.team1ServerPlayerIndex ?? 0) + 1) % 2;
+        } else {
+          nextT2ServerPlayerIndex = ((state.team2ServerPlayerIndex ?? 0) + 1) % 2;
+        }
+
+        if (nextDoublesRotation) {
+          nextDoublesRotation.nextServerIndex =
+            (nextDoublesRotation.nextServerIndex + 1) % 4;
+          const nextPlayerId =
+            nextDoublesRotation.serviceOrder[nextDoublesRotation.nextServerIndex];
+          const isT1 = state.team1.players.some((p) => p.id === nextPlayerId);
+          if (isT1) {
+            nextServerTeam = 'team1';
+            const foundIdx = state.team1.players.findIndex((p) => p.id === nextPlayerId);
+            nextServerPlayerIndex = foundIdx >= 0 ? foundIdx : 0;
+            nextT1ServerPlayerIndex = nextServerPlayerIndex;
+          } else {
+            nextServerTeam = 'team2';
+            const foundIdx = state.team2.players.findIndex((p) => p.id === nextPlayerId);
+            nextServerPlayerIndex = foundIdx >= 0 ? foundIdx : 0;
+            nextT2ServerPlayerIndex = nextServerPlayerIndex;
+          }
+        } else {
+          nextServerTeam = state.currentServerTeam === 'team1' ? 'team2' : 'team1';
+          nextServerPlayerIndex =
+            nextServerTeam === 'team1' ? nextT1ServerPlayerIndex : nextT2ServerPlayerIndex;
+        }
+      } else {
+        // Singles: simple alternation
+        nextServerTeam = state.currentServerTeam === 'team1' ? 'team2' : 'team1';
+        nextServerPlayerIndex = 0;
       }
 
       // Check if set won
@@ -427,7 +914,12 @@ export function recordPoint(
         const isSuperTiebreak =
           state.settings.finalSetTiebreak === 'super' &&
           newCurrentSetIndex === (state.settings.format === '3sets' ? 2 : 4);
-        newGameScore = createInitialGameScore(true, isSuperTiebreak ? 10 : 7);
+        newGameScore = createInitialGameScore(
+          true,
+          isSuperTiebreak ? 10 : 7,
+          nextServerTeam,
+          nextServerPlayerIndex
+        );
       } else {
         newGameScore = createInitialGameScore(false);
       }
@@ -453,42 +945,77 @@ export function recordPoint(
           state.settings.finalSetTiebreak === 'super' &&
           newCurrentSetIndex === (state.settings.format === '3sets' ? 2 : 4);
 
-        newGameScore = createInitialGameScore(isNextSuper, isNextSuper ? 10 : 7);
+        newGameScore = createInitialGameScore(
+          isNextSuper,
+          isNextSuper ? 10 : 7,
+          nextServerTeam,
+          nextServerPlayerIndex
+        );
       }
     } else if (!newGameScore.isTiebreak) {
       newGameScore = createInitialGameScore(false);
     }
+  }
 
-    // Rotate server for next game
-    nextServerTeam = state.currentServerTeam === 'team1' ? 'team2' : 'team1';
-    if (state.settings.type === 'doubles') {
-      // In doubles, rotate server index
-      nextServerPlayerIndex = (state.currentServerPlayerIndex + 1) % 2;
+  // Resolve individual player IDs
+  let winnerPlayerId = shotDetails.winnerPlayerId;
+  let winnerPlayerName = shotDetails.winnerPlayerName;
+  if (!winnerPlayerId) {
+    if (winnerPlayerName) {
+      const matchP = state[pointWinner].players.find((p) => p.name === winnerPlayerName);
+      winnerPlayerId = matchP?.id || state[pointWinner].players[0]?.id;
+    } else {
+      winnerPlayerId = state[pointWinner].players[0]?.id;
+      winnerPlayerName = state[pointWinner].players[0]?.name;
+    }
+  } else if (!winnerPlayerName) {
+    const matchP = state[pointWinner].players.find((p) => p.id === winnerPlayerId);
+    winnerPlayerName = matchP?.name;
+  }
+
+  let errorPlayerId = shotDetails.errorPlayerId;
+  let errorPlayerName = shotDetails.errorPlayerName;
+  if (shotDetails.errorTeam) {
+    const errTeam = shotDetails.errorTeam;
+    if (!errorPlayerId) {
+      if (errorPlayerName) {
+        const matchP = state[errTeam].players.find((p) => p.name === errorPlayerName);
+        errorPlayerId = matchP?.id || state[errTeam].players[0]?.id;
+      } else {
+        errorPlayerId = state[errTeam].players[0]?.id;
+        errorPlayerName = state[errTeam].players[0]?.name;
+      }
+    } else if (!errorPlayerName) {
+      const matchP = state[errTeam].players.find((p) => p.id === errorPlayerId);
+      errorPlayerName = matchP?.name;
     }
   }
 
-  // Create point record
+  // Create point record with stateSnapshotBefore
   const pointRecord: PointRecord = {
-    id: `pt_${Date.now()}_${state.pointsHistory.length + 1}`,
+    id: `pt_${Date.now()}_${state.pointsHistory.length + 1}_${Math.random().toString(36).substring(2, 6)}`,
     timestamp: Date.now(),
     setIndex: state.currentSetIndex,
     gameIndexInSet: currentSet.team1Games + currentSet.team2Games,
     pointNumberInMatch: state.pointsHistory.length + 1,
     servingTeam: state.currentServerTeam,
-    servingPlayerId:
-      state[state.currentServerTeam].players[state.currentServerPlayerIndex]?.id || 'p1',
+    servingPlayerId: servingInfo.playerId,
+    receivingPlayerId: receivingInfo.playerId,
     serveCourt,
     isSecondServe: state.isFirstServeFault,
     winnerTeam: pointWinner,
+    winnerPlayerId,
+    winnerPlayerName,
     category: shotDetails.category,
     stroke: shotDetails.stroke,
-    winnerPlayerName: shotDetails.winnerPlayerName,
     errorTeam: shotDetails.errorTeam,
-    errorPlayerName: shotDetails.errorPlayerName,
+    errorPlayerId,
+    errorPlayerName,
     errorStroke: shotDetails.errorStroke,
     errorDetail: shotDetails.errorDetail,
     courtZone: shotDetails.courtZone,
     rallyLength: shotDetails.rallyLength || 1,
+    recordingMode: shotDetails.recordingMode || state.activeRecordingMode || 'detailed',
     isBreakPoint: pointContext.isBreakPoint,
     isGamePoint: pointContext.isGamePoint,
     isSetPoint: pointContext.isSetPoint,
@@ -498,6 +1025,7 @@ export function recordPoint(
       sets: newSets.map((s) => ({ ...s })),
       game: { team1: String(newGameScore.team1Display), team2: String(newGameScore.team2Display) },
     },
+    stateSnapshotBefore,
   };
 
   return {
@@ -511,13 +1039,17 @@ export function recordPoint(
     currentGame: newGameScore,
     currentServerTeam: nextServerTeam,
     currentServerPlayerIndex: nextServerPlayerIndex,
+    team1ServerPlayerIndex: nextT1ServerPlayerIndex,
+    team2ServerPlayerIndex: nextT2ServerPlayerIndex,
+    doublesRotation: nextDoublesRotation,
     isFirstServeFault: false, // Reset 1st serve fault on point finish
     pointsHistory: [...state.pointsHistory, pointRecord],
+    redoStack: [], // Reset redo stack on new point
   };
 }
 
 /**
- * Undo last point accurately
+ * Undo last point with 100% exact state restoration using snapshots
  */
 export function undoLastPoint(state: MatchState): MatchState {
   if (state.pointsHistory.length === 0) return state;
@@ -525,13 +1057,59 @@ export function undoLastPoint(state: MatchState): MatchState {
   const history = [...state.pointsHistory];
   const lastPoint = history.pop()!;
 
-  // Restore game and set from lastPoint.scoreBefore
+  // Current state snapshot before undo to store on redoStack
+  const currentSnapshotForRedo: MatchStateSnapshot = {
+    currentSetIndex: state.currentSetIndex,
+    sets: state.sets.map((s) => ({ ...s })),
+    currentGame: { ...state.currentGame },
+    currentServerTeam: state.currentServerTeam,
+    currentServerPlayerIndex: state.currentServerPlayerIndex,
+    team1ServerPlayerIndex: state.team1ServerPlayerIndex ?? 0,
+    team2ServerPlayerIndex: state.team2ServerPlayerIndex ?? 0,
+    currentReceiverPlayerIndex: state.currentReceiverPlayerIndex ?? 0,
+    doublesRotation: state.doublesRotation
+      ? JSON.parse(JSON.stringify(state.doublesRotation))
+      : undefined,
+    isFirstServeFault: state.isFirstServeFault,
+    isFinished: state.isFinished,
+    matchWinner: state.matchWinner,
+    timestamp: Date.now(),
+    pointRecord: lastPoint,
+  };
+
+  const nextRedoStack = [...(state.redoStack || []), currentSnapshotForRedo];
+
+  // If full lossless snapshot exists, restore directly from snapshot!
+  if (lastPoint.stateSnapshotBefore) {
+    const snap = lastPoint.stateSnapshotBefore;
+    return {
+      ...state,
+      currentSetIndex: snap.currentSetIndex,
+      sets: snap.sets.map((s) => ({ ...s })),
+      currentGame: { ...snap.currentGame },
+      currentServerTeam: snap.currentServerTeam,
+      currentServerPlayerIndex: snap.currentServerPlayerIndex,
+      team1ServerPlayerIndex: snap.team1ServerPlayerIndex,
+      team2ServerPlayerIndex: snap.team2ServerPlayerIndex,
+      currentReceiverPlayerIndex: snap.currentReceiverPlayerIndex,
+      doublesRotation: snap.doublesRotation
+        ? JSON.parse(JSON.stringify(snap.doublesRotation))
+        : state.doublesRotation,
+      isFirstServeFault: snap.isFirstServeFault,
+      isFinished: snap.isFinished,
+      matchWinner: snap.matchWinner,
+      updatedAt: Date.now(),
+      pointsHistory: history,
+      redoStack: nextRedoStack,
+    };
+  }
+
+  // Graceful fallback for legacy points without snapshot
   const restoredSets = lastPoint.scoreBefore.sets.map((s) => ({ ...s }));
   const restoredGame: GameScore = {
     ...state.currentGame,
     team1Display: lastPoint.scoreBefore.game.team1,
     team2Display: lastPoint.scoreBefore.game.team2,
-    // Calculate raw points from display or previous state
     team1Points: parseScoreToPoints(lastPoint.scoreBefore.game.team1),
     team2Points: parseScoreToPoints(lastPoint.scoreBefore.game.team2),
   };
@@ -547,6 +1125,43 @@ export function undoLastPoint(state: MatchState): MatchState {
     currentServerTeam: lastPoint.servingTeam,
     isFirstServeFault: lastPoint.isSecondServe,
     pointsHistory: history,
+    redoStack: nextRedoStack,
+  };
+}
+
+/**
+ * Redo last undone point with 100% exact state restoration
+ */
+export function redoLastPoint(state: MatchState): MatchState {
+  if (!state.redoStack || state.redoStack.length === 0) return state;
+
+  const redoStack = [...state.redoStack];
+  const targetSnapshot = redoStack.pop()!;
+
+  const restoredPoint = targetSnapshot.pointRecord;
+  const newHistory = restoredPoint
+    ? [...state.pointsHistory, restoredPoint]
+    : state.pointsHistory;
+
+  return {
+    ...state,
+    currentSetIndex: targetSnapshot.currentSetIndex,
+    sets: targetSnapshot.sets.map((s) => ({ ...s })),
+    currentGame: { ...targetSnapshot.currentGame },
+    currentServerTeam: targetSnapshot.currentServerTeam,
+    currentServerPlayerIndex: targetSnapshot.currentServerPlayerIndex,
+    team1ServerPlayerIndex: targetSnapshot.team1ServerPlayerIndex,
+    team2ServerPlayerIndex: targetSnapshot.team2ServerPlayerIndex,
+    currentReceiverPlayerIndex: targetSnapshot.currentReceiverPlayerIndex,
+    doublesRotation: targetSnapshot.doublesRotation
+      ? JSON.parse(JSON.stringify(targetSnapshot.doublesRotation))
+      : state.doublesRotation,
+    isFirstServeFault: targetSnapshot.isFirstServeFault,
+    isFinished: targetSnapshot.isFinished,
+    matchWinner: targetSnapshot.matchWinner,
+    updatedAt: Date.now(),
+    pointsHistory: newHistory,
+    redoStack,
   };
 }
 
@@ -591,15 +1206,59 @@ export function registerSecondServeFault(state: MatchState): MatchState {
 }
 
 /**
- * Change who is currently serving (กำหนดผู้เสิร์ฟ)
+ * Reset 1st serve fault (Let / เสิร์ฟใหม่)
  */
-export function setServerTeam(state: MatchState, team: 'team1' | 'team2'): MatchState {
+export function resetServeFault(state: MatchState): MatchState {
   return {
     ...state,
-    currentServerTeam: team,
     isFirstServeFault: false,
     updatedAt: Date.now(),
   };
+}
+
+/**
+ * Change who is currently serving (กำหนดผู้เสิร์ฟ)
+ */
+export function setServerTeam(state: MatchState, team: 'team1' | 'team2'): MatchState {
+  const isDoubles = state.settings.type === 'doubles';
+  const playerIndex = isDoubles
+    ? (team === 'team1' ? (state.team1ServerPlayerIndex ?? 0) : (state.team2ServerPlayerIndex ?? 0))
+    : 0;
+
+  return {
+    ...state,
+    currentServerTeam: team,
+    currentServerPlayerIndex: playerIndex,
+    isFirstServeFault: false,
+    updatedAt: Date.now(),
+  };
+}
+
+/**
+ * In doubles: toggle which player in the serving team is serving (สลับคนเสิร์ฟในทีมคู่)
+ */
+export function toggleDoublesServerPlayer(state: MatchState): MatchState {
+  if (state.settings.type !== 'doubles') return state;
+  const currentTeam = state.currentServerTeam;
+  if (currentTeam === 'team1') {
+    const nextIdx = ((state.team1ServerPlayerIndex ?? 0) + 1) % 2;
+    return {
+      ...state,
+      team1ServerPlayerIndex: nextIdx,
+      currentServerPlayerIndex: nextIdx,
+      isFirstServeFault: false,
+      updatedAt: Date.now(),
+    };
+  } else {
+    const nextIdx = ((state.team2ServerPlayerIndex ?? 0) + 1) % 2;
+    return {
+      ...state,
+      team2ServerPlayerIndex: nextIdx,
+      currentServerPlayerIndex: nextIdx,
+      isFirstServeFault: false,
+      updatedAt: Date.now(),
+    };
+  }
 }
 
 /**

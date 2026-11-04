@@ -32,6 +32,8 @@ export interface GameScore {
   isDeuce: boolean;
   isTiebreak: boolean;
   tiebreakPointsToWin: number;
+  tiebreakInitialServerTeam?: 'team1' | 'team2';
+  tiebreakInitialServerPlayerIndex?: number;
 }
 
 export interface SetScore {
@@ -70,6 +72,22 @@ export type ErrorDetail =
 
 export type CourtZone = 'baseline_left' | 'baseline_center' | 'baseline_right' | 'midcourt' | 'net';
 
+export interface PointParticipant {
+  playerId: string;
+  teamId: 'team1' | 'team2';
+}
+
+export interface DoublesRotation {
+  serviceOrder: string[]; // 4 player IDs in rotation order [P1, P3, P2, P4]
+  nextServerIndex: number; // 0..3 index into serviceOrder
+  receivingPositions: {
+    team1Deuce: string; // playerId
+    team1Ad: string;    // playerId
+    team2Deuce: string; // playerId
+    team2Ad: string;    // playerId
+  };
+}
+
 export interface PointRecord {
   id: string;
   timestamp: number;
@@ -84,18 +102,21 @@ export interface PointRecord {
   isSecondServe: boolean;
 
   winnerTeam: 'team1' | 'team2';
+  winnerPlayerId?: string;
+  winnerPlayerName?: string;
   category: ShotCategory;
   stroke?: StrokeType;
-  winnerPlayerName?: string;
   
   // Detailed error tracking (who missed and with what stroke)
   errorTeam?: 'team1' | 'team2';
+  errorPlayerId?: string;
   errorPlayerName?: string;
   errorStroke?: StrokeType;
   errorDetail?: ErrorDetail;
   courtZone?: CourtZone;
 
   rallyLength?: number;
+  recordingMode?: 'quick' | 'detailed';
   isBreakPoint?: boolean;
   isGamePoint?: boolean;
   isSetPoint?: boolean;
@@ -109,7 +130,29 @@ export interface PointRecord {
     sets: SetScore[];
     game: { team1: string; team2: string };
   };
+
+  // Full lossless snapshot before this point was recorded (for 100% accurate Undo/Redo)
+  stateSnapshotBefore?: MatchStateSnapshot;
 }
+
+export interface MatchStateSnapshot {
+  currentSetIndex: number;
+  sets: SetScore[];
+  currentGame: GameScore;
+  currentServerTeam: 'team1' | 'team2';
+  currentServerPlayerIndex: number;
+  team1ServerPlayerIndex: number;
+  team2ServerPlayerIndex: number;
+  currentReceiverPlayerIndex: number;
+  doublesRotation?: DoublesRotation;
+  isFirstServeFault: boolean;
+  isFinished: boolean;
+  matchWinner?: 'team1' | 'team2';
+  timestamp?: number;
+  pointRecord?: PointRecord;
+}
+
+export type MatchSnapshot = MatchStateSnapshot;
 
 export interface TeamStats {
   totalPointsWon: number;
@@ -187,9 +230,21 @@ export interface MatchState {
   currentGame: GameScore;
 
   currentServerTeam: 'team1' | 'team2';
-  currentServerPlayerIndex: number; // For doubles (0 or 1)
+  currentServerPlayerIndex: number; // For doubles active player (0 or 1)
+  team1ServerPlayerIndex: number; // Team 1 dedicated doubles server (0 or 1)
+  team2ServerPlayerIndex: number; // Team 2 dedicated doubles server (0 or 1)
   currentReceiverPlayerIndex: number;
   
+  // Doubles rotation and receiver positions
+  doublesRotation?: DoublesRotation;
+
   isFirstServeFault: boolean; // Tracking 1st serve fault
   pointsHistory: PointRecord[];
+
+  // Undo/Redo stack for lossless state navigation
+  redoStack?: MatchStateSnapshot[];
+
+  // Architecture V2 Metadata
+  schemaVersion?: number; // 2 for V2
+  activeRecordingMode?: 'quick' | 'detailed';
 }

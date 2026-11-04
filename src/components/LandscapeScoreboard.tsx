@@ -5,6 +5,7 @@ import { InteractiveCourt } from './InteractiveCourt';
 import { PWAInstallButton } from './PWAInstallButton';
 import {
   RotateCcw,
+  RotateCw,
   AlertTriangle,
   BarChart2,
   FileSpreadsheet,
@@ -37,6 +38,8 @@ interface LandscapeScoreboardProps {
   onOpenDetailModal: (mode: 'winner' | 'error', team: 'team1' | 'team2') => void;
   onOpenEditPlayers: () => void;
   onUndo: () => void;
+  onRedo?: () => void;
+  canRedo?: boolean;
   onFirstServeFault: () => void;
   onSecondServeFault: () => void;
   onResetServeFault: () => void;
@@ -57,6 +60,8 @@ export const LandscapeScoreboard: React.FC<LandscapeScoreboardProps> = ({
   onOpenDetailModal,
   onOpenEditPlayers,
   onUndo,
+  onRedo,
+  canRedo,
   onFirstServeFault,
   onSecondServeFault,
   onResetServeFault,
@@ -84,11 +89,21 @@ export const LandscapeScoreboard: React.FC<LandscapeScoreboardProps> = ({
 
   // Total games played in set
   const totalGamesInSet = currentSet.team1Games + currentSet.team2Games;
-  const isChangeEndsNow =
+
+  // Change ends: In standard games after odd games (1, 3, 5...), or in tiebreak every 6 points (6, 12, 18...)
+  const isTiebreakChangeEnds =
+    currentGame.isTiebreak &&
+    currentGame.team1Points + currentGame.team2Points > 0 &&
+    (currentGame.team1Points + currentGame.team2Points) % 6 === 0;
+
+  const isStandardChangeEnds =
+    !currentGame.isTiebreak &&
     totalGamesInSet > 0 &&
     totalGamesInSet % 2 === 1 &&
     currentGame.team1Points === 0 &&
     currentGame.team2Points === 0;
+
+  const isChangeEndsNow = isTiebreakChangeEnds || isStandardChangeEnds;
 
   const serveCourt = getCurrentServeCourt(currentGame);
   const serverPlayerName = isServerT1
@@ -532,20 +547,37 @@ export const LandscapeScoreboard: React.FC<LandscapeScoreboardProps> = ({
                 <span className="truncate">❌ ตีเสีย...</span>
               </button>
 
-              {/* Button 3: Undo Point */}
-              <button
-                type="button"
-                onClick={() => {
-                  if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(20);
-                  onUndo();
-                }}
-                disabled={match.pointsHistory.length === 0}
-                className="h-10 sm:h-11 px-2 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-98 disabled:opacity-30 disabled:cursor-not-allowed border-2 border-slate-700 text-slate-200 font-bold text-xs flex items-center justify-center gap-1 transition shadow-sm"
-                title="ย้อนกลับแต้มล่าสุด (Undo Point)"
-              >
-                <RotateCcw className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                <span className="truncate">ถอยแต้ม</span>
-              </button>
+              {/* Button 3: Undo & Redo Point */}
+              <div className="flex gap-1 h-10 sm:h-11">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(20);
+                    onUndo();
+                  }}
+                  disabled={match.pointsHistory.length === 0}
+                  className="flex-1 px-1 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-98 disabled:opacity-30 disabled:cursor-not-allowed border-2 border-slate-700 text-slate-200 font-bold text-xs flex items-center justify-center gap-1 transition shadow-sm"
+                  title="ย้อนกลับแต้มล่าสุด (Undo Point)"
+                >
+                  <RotateCcw className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                  <span className="truncate">ถอยแต้ม</span>
+                </button>
+
+                {onRedo && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(20);
+                      onRedo();
+                    }}
+                    disabled={!canRedo}
+                    className="w-9 px-1 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-98 disabled:opacity-20 disabled:cursor-not-allowed border-2 border-slate-700 text-slate-200 font-bold text-xs flex items-center justify-center transition shadow-sm"
+                    title="คืนแต้มที่ย้อนกลับ (Redo Point)"
+                  >
+                    <RotateCw className="w-3.5 h-3.5 text-emerald-400" />
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>
