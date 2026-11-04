@@ -176,12 +176,12 @@ export const DetailPointModal: React.FC<DetailPointModalProps> = ({
             </label>
             <div className="grid grid-cols-3 gap-1.5 text-xs">
               {[
-                { id: 'forehand', label: 'โฟร์แฮนด์ (FH)' },
-                { id: 'backhand', label: 'แบ็คแฮนด์ (BH)' },
-                { id: 'volley', label: 'วอลเลย์หน้าเน็ต' },
-                { id: 'smash', label: 'สแมช / ลูกตบ' },
-                { id: 'drop_shot', label: 'ดรอปช็อต' },
-                { id: 'return_winner', label: 'รีเทิร์นวินเนอร์' },
+                { id: 'forehand', label: '🎾 โฟร์แฮนด์ (FH)' },
+                { id: 'backhand', label: '🎾 แบ็คแฮนด์ (BH)' },
+                { id: 'smash', label: '💥 สแมช / ลูกตบ' },
+                { id: 'volley', label: '⚡ วอลเลย์หน้าเน็ต' },
+                { id: 'drop_shot', label: '🪶 ดรอปช็อต' },
+                { id: 'return_winner', label: '🎯 รีเทิร์นวินเนอร์' },
               ].map((item) => (
                 <button
                   key={item.id}
@@ -189,7 +189,7 @@ export const DetailPointModal: React.FC<DetailPointModalProps> = ({
                   onClick={() => setSelectedStroke(item.id as StrokeType)}
                   className={`py-2 px-1 rounded-lg border font-semibold transition text-center ${
                     selectedStroke === item.id
-                      ? 'bg-emerald-500/25 border-emerald-400 text-emerald-200 shadow'
+                      ? 'bg-emerald-500/25 border-emerald-400 text-emerald-200 shadow font-bold'
                       : 'bg-slate-800/80 border-slate-700 text-slate-300 hover:bg-slate-800'
                   }`}
                 >
@@ -212,9 +212,9 @@ export const DetailPointModal: React.FC<DetailPointModalProps> = ({
                 {[
                   { id: 'forehand', label: 'โฟร์แฮนด์' },
                   { id: 'backhand', label: 'แบ็คแฮนด์' },
-                  { id: 'volley', label: 'วอลเลย์หน้าเน็ต' },
-                  { id: 'smash', label: 'สแมช' },
-                  { id: 'return_winner', label: 'รับเสิร์ฟ' },
+                  { id: 'smash', label: '💥 สแมช' },
+                  { id: 'volley', label: '⚡ วอลเลย์' },
+                  { id: 'return_winner', label: '🎯 รับเสิร์ฟ' },
                 ].map((item) => (
                   <button
                     key={item.id}
@@ -222,7 +222,7 @@ export const DetailPointModal: React.FC<DetailPointModalProps> = ({
                     onClick={() => setSelectedErrorStroke(item.id as StrokeType)}
                     className={`py-2 px-1 rounded-lg border font-semibold transition text-center ${
                       selectedErrorStroke === item.id
-                        ? 'bg-rose-500/25 border-rose-400 text-rose-200 shadow'
+                        ? 'bg-rose-500/25 border-rose-400 text-rose-200 shadow font-bold'
                         : 'bg-slate-800/80 border-slate-700 text-slate-300 hover:bg-slate-800'
                     }`}
                   >

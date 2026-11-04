@@ -235,142 +235,70 @@ export const LandscapeScoreboard: React.FC<LandscapeScoreboardProps> = ({
       {/* 2. MAIN HORIZONTAL SCORING ARENA */}
       <main className="flex-1 min-h-0 grid grid-cols-12 gap-1.5 p-1.5 relative overflow-hidden">
         {/* ================= LEFT SIDE: TEAM 1 CARD (Col 1-4) ================= */}
-        <div className="col-span-4 h-full flex flex-col justify-between rounded-2xl bg-gradient-to-b from-slate-900/95 to-slate-950 border border-emerald-800/60 p-2.5 relative shadow-xl overflow-hidden">
-          {/* Header & Server Toggle */}
-          <div className="flex items-center justify-between pb-1 border-b border-slate-800/80">
+        <div className="col-span-4 h-full flex flex-col justify-between rounded-2xl bg-gradient-to-b from-slate-900/95 to-slate-950 border border-emerald-800/60 p-2 sm:p-2.5 relative shadow-xl overflow-hidden">
+          {/* Header */}
+          <div className="flex items-center justify-between pb-1.5 border-b border-slate-800/80 shrink-0">
             <div
               onClick={onOpenEditPlayers}
               className="flex items-center gap-1.5 cursor-pointer hover:opacity-80 transition truncate"
               title="คลิกเพื่อแก้ไขชื่อผู้เล่น"
             >
-              <h2 className="text-sm font-black text-emerald-400 truncate leading-tight">
+              <h2 className="text-xs sm:text-sm font-black text-emerald-400 truncate leading-tight">
                 {team1.name}
               </h2>
               <Edit3 className="w-3 h-3 text-slate-500 hover:text-emerald-300 shrink-0" />
             </div>
 
             <div className="flex items-center gap-1">
-              {/* Server indicator / toggle button */}
-              <button
-                onClick={onToggleServer}
-                className={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-black transition ${
-                  isServerT1
-                    ? 'bg-yellow-400 text-slate-950 shadow animate-pulse'
-                    : 'bg-slate-800 text-slate-400 hover:text-white'
-                }`}
-                title="คลิกเพื่อกำหนดให้คนนี้เสิร์ฟ"
-              >
-                <span>🎾 {isServerT1 ? (isFirstServeFault ? 'เสิร์ฟ 2' : 'เสิร์ฟ 1') : 'รับ'}</span>
-              </button>
-
-              <span className="text-[10px] text-slate-400 font-semibold bg-slate-900 px-1.5 py-0.5 rounded border border-slate-800">
+              <span className="text-[10px] sm:text-xs font-bold text-slate-300 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
                 {currentSet.team1Games} เกม
               </span>
             </div>
           </div>
 
-          {/* Giant Score Display with Prominent Serving Badge on Head of Score */}
-          <div className="my-auto py-1 text-center flex flex-col items-center justify-center">
-            {/* Server Badge on Head of Score (โชว์บนหัวคะแนนให้เห็นชัดๆ) */}
-            <div className="w-full mb-1 flex items-center justify-center">
-              {isServerT1 ? (
-                <button
-                  type="button"
-                  onClick={onToggleServer}
-                  className="px-3 py-1 rounded-full bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-black text-xs sm:text-sm flex items-center justify-center gap-1.5 shadow-lg shadow-yellow-500/40 border border-yellow-200 transition active:scale-95 animate-pulse"
-                  title="คลิกเพื่อสลับคนเสิร์ฟ"
-                >
-                  <span className="text-sm">🎾</span>
-                  <span className="truncate">{serverPlayerName} เสิร์ฟ ({isFirstServeFault ? 'เสิร์ฟ 2' : 'เสิร์ฟ 1'})</span>
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={onToggleServer}
-                  className="px-2.5 py-0.5 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 text-[11px] font-bold border border-slate-700/80 transition active:scale-95"
-                  title="คลิกเพื่อสลับให้ฝ่ายนี้เสิร์ฟ"
-                >
-                  <span>🛡️ ฝ่ายรับเสิร์ฟ</span>
-                </button>
-              )}
-            </div>
+          {/* Giant Touch-to-Score Button (แตะที่คะแนนเพื่อเพิ่มแต้มได้โดยตรง) */}
+          <button
+            type="button"
+            onClick={() => {
+              if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(30);
+              onAwardPoint('team1', 'regular_point');
+            }}
+            className="flex-1 my-1.5 rounded-2xl bg-slate-900/60 hover:bg-emerald-950/40 active:scale-95 border-2 border-emerald-500/30 hover:border-emerald-400/80 text-center flex flex-col items-center justify-center transition-all duration-150 cursor-pointer shadow-inner group relative overflow-hidden"
+            title="แตะที่ตัวเลขคะแนนนี้เพื่อเพิ่มแต้มให้ทีม 1 (+1 แต้ม)"
+          >
+            {/* Server Badge on Head of Score */}
+            {isServerT1 && (
+              <div className="mb-1 px-2.5 py-0.5 rounded-full bg-yellow-400 text-slate-950 font-black text-[10px] sm:text-xs flex items-center gap-1 shadow animate-pulse">
+                <span>🎾</span>
+                <span className="truncate">{serverPlayerName} เสิร์ฟ ({isFirstServeFault ? 'ลูก 2' : 'ลูก 1'})</span>
+              </div>
+            )}
 
+            {/* Giant Score Display */}
             <div
-              className={`font-mono text-5xl sm:text-6xl font-black tracking-tight drop-shadow-md ${
-                currentGame.team1Display === 'AD' ? 'text-amber-300 scale-105' : 'text-white'
+              className={`font-mono text-6xl sm:text-7xl lg:text-8xl font-black tracking-tight drop-shadow-lg transition-transform group-hover:scale-105 ${
+                currentGame.team1Display === 'AD' ? 'text-amber-300' : 'text-white'
               }`}
             >
               {currentGame.team1Display}
             </div>
+
             {currentGame.isTiebreak && (
               <span className="text-[10px] font-bold text-amber-400 uppercase tracking-widest mt-0.5">
                 TIE-BREAK
               </span>
             )}
-          </div>
 
-          {/* MAIN BUTTONS (Big, touch-friendly, with popup trigger for detailed breakdown) */}
-          <div className="space-y-1.5 shrink-0">
-            {/* Primary Big Point Button */}
-            <button
-              onClick={() => onAwardPoint('team1', 'regular_point')}
-              className="w-full py-2.5 sm:py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 active:scale-95 text-white font-black text-xs sm:text-sm shadow-lg shadow-emerald-950/60 flex items-center justify-center gap-1.5 transition"
-            >
-              <Plus className="w-4 h-4 stroke-[3]" />
-              <span>+ แต้มปกติ ({team1.name.slice(0, 8)})</span>
-            </button>
-
-            {/* Popup Detail Buttons: Winner vs Error */}
-            <div className="grid grid-cols-2 gap-1.5">
-              <button
-                onClick={() => onOpenDetailModal('winner', 'team1')}
-                className="py-2 px-2 rounded-xl bg-emerald-950/70 border border-emerald-700/60 hover:bg-emerald-900 active:scale-95 text-emerald-300 text-xs font-bold flex items-center justify-center gap-1 shadow transition"
-                title="ระบุรายละเอียดลูกวินเนอร์ (โฟร์แฮนด์, แบ็คแฮนด์, วอลเลย์, สแมช)"
-              >
-                <Flame className="w-3.5 h-3.5 text-emerald-400" />
-                <span>🏆 วินเนอร์...</span>
-              </button>
-
-              <button
-                onClick={() => onOpenDetailModal('error', 'team2')}
-                className="py-2 px-2 rounded-xl bg-rose-950/70 border border-rose-700/60 hover:bg-rose-900 active:scale-95 text-rose-300 text-xs font-bold flex items-center justify-center gap-1 shadow transition"
-                title="ระบุรายละเอียดคนตีเสีย (ใครตีเสีย, ตีลูกอะไร, ติดเน็ตหรือออก)"
-              >
-                <AlertOctagon className="w-3.5 h-3.5 text-rose-400" />
-                <span>❌ คู่แข่งตีเสีย...</span>
-              </button>
+            {/* Clear tap affordance label */}
+            <div className="mt-1 flex items-center gap-1 text-[10px] text-emerald-400/80 font-bold group-hover:text-emerald-300 transition">
+              <span>👆 แตะที่นี่เพื่อ +1 แต้ม</span>
             </div>
-
-            {/* Quick 1-Tap: Ace (if server) or Opponent Double Fault (if receiver) */}
-            <div>
-              {isServerT1 ? (
-                <button
-                  onClick={() => onAwardPoint('team1', 'ace', { stroke: 'serve' })}
-                  className="w-full py-1.5 px-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/50 text-amber-300 font-bold active:scale-95 flex items-center justify-center gap-1.5 transition text-xs shadow-xs"
-                  title="เสิร์ฟเอซ 1 แตะ"
-                >
-                  <Zap className="w-3.5 h-3.5 text-amber-400" />
-                  <span>⚡ เสิร์ฟเอซ (Ace - 1 แตะ)</span>
-                </button>
-              ) : (
-                <button
-                  onClick={onSecondServeFault}
-                  className="w-full py-1.5 px-2 rounded-xl bg-red-500/20 hover:bg-red-500/30 border border-red-500/50 text-red-300 font-bold active:scale-95 flex items-center justify-center gap-1.5 transition text-xs shadow-xs"
-                  title="คู่แข่งเสิร์ฟเสีย 2 ลูก (ดับเบิ้ลฟอลต์)"
-                >
-                  <AlertTriangle className="w-3.5 h-3.5 text-red-400" />
-                  <span>🚨 คู่แข่งเสีย 2 ลูก (Double Fault)</span>
-                </button>
-              )}
-            </div>
-          </div>
+          </button>
         </div>
 
-        {/* ================= CENTER: COURT & REFEREE DOCK (Col 5-8) ================= */}
-        {/* แบ่งเป็น 3 ส่วน: บน (แจ้งเฉพาะข้อความสำคัญ), กลาง (แสดงคอร์ตเต็มตา), ล่าง (ปุ่มกดง่าย 2 แถว) */}
+        {/* ================= CENTER: COURT & UNIFIED REFEREE DOCK (Col 5-8) ================= */}
         <div className="col-span-4 h-full flex flex-col justify-between rounded-2xl bg-slate-900/90 border border-slate-800 p-2 overflow-hidden shadow-xl gap-1.5">
-
-          {/* 1. ส่วนบน: เอาไว้แจ้งข้อความสำคัญต่างๆ (แสดงเฉพาะเมื่อมีเหตุการณ์สำคัญ เช่น จะโดนเบรค, แมตพ้อย, เซ็ตพ้อย, จบเกม) */}
+          {/* 1. ส่วนบน: ข้อความสถานะสำคัญของเกม (Match Point / Set Point / Break Point / Game Over) */}
           {(pointContext.badgeType === 'match' ||
             pointContext.badgeType === 'set' ||
             pointContext.badgeType === 'break' ||
@@ -378,19 +306,17 @@ export const LandscapeScoreboard: React.FC<LandscapeScoreboardProps> = ({
             match.isFinished ||
             isFirstServeFault ||
             (currentGame.team1Points === 0 && currentGame.team2Points === 0 && totalGamesInSet > 0)) && (
-            <div className="shrink-0 h-11 sm:h-12 w-full flex items-center justify-center">
+            <div className="shrink-0 h-10 sm:h-11 w-full flex items-center justify-center">
               {pointContext.badgeType === 'match' ? (
                 <div className="w-full h-full py-1 px-3 rounded-xl bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 text-slate-950 flex items-center justify-between shadow-lg shadow-amber-500/30 border border-amber-300 animate-pulse">
                   <div className="flex items-center gap-2 min-w-0">
-                    <div className="w-7 h-7 rounded-lg bg-slate-950/20 flex items-center justify-center shrink-0">
-                      <Trophy className="w-4 h-4 text-slate-950" />
-                    </div>
+                    <Trophy className="w-4 h-4 text-slate-950 shrink-0" />
                     <div className="text-left min-w-0">
                       <div className="text-xs font-black uppercase tracking-wider truncate">
-                        🏆 MATCH POINT (แมตพ้อย!)
+                        🏆 MATCH POINT!
                       </div>
-                      <div className="text-[10px] sm:text-[11px] font-bold text-slate-900 truncate">
-                        {pointContext.pointHolderName} แต้มตัดสินแชมป์ มีโอกาสปิดแมตช์!
+                      <div className="text-[10px] font-bold text-slate-900 truncate">
+                        {pointContext.pointHolderName} มีโอกาสปิดแมตช์!
                       </div>
                     </div>
                   </div>
@@ -401,14 +327,12 @@ export const LandscapeScoreboard: React.FC<LandscapeScoreboardProps> = ({
               ) : pointContext.badgeType === 'set' ? (
                 <div className="w-full h-full py-1 px-3 rounded-xl bg-gradient-to-r from-purple-600 via-pink-600 to-purple-600 text-white flex items-center justify-between shadow-lg shadow-pink-500/30 border border-pink-400 animate-pulse">
                   <div className="flex items-center gap-2 min-w-0">
-                    <div className="w-7 h-7 rounded-lg bg-black/20 flex items-center justify-center shrink-0">
-                      <Target className="w-4 h-4 text-white" />
-                    </div>
+                    <Target className="w-4 h-4 text-white shrink-0" />
                     <div className="text-left min-w-0">
                       <div className="text-xs font-black uppercase tracking-wider truncate">
-                        🎯 SET POINT (เซ็ตพ้อย!)
+                        🎯 SET POINT!
                       </div>
-                      <div className="text-[10px] sm:text-[11px] font-medium text-pink-100 truncate">
+                      <div className="text-[10px] font-medium text-pink-100 truncate">
                         {pointContext.pointHolderName} แต้มตัดสินเซตที่ {currentSetIndex + 1}!
                       </div>
                     </div>
@@ -420,15 +344,13 @@ export const LandscapeScoreboard: React.FC<LandscapeScoreboardProps> = ({
               ) : pointContext.badgeType === 'break' ? (
                 <div className="w-full h-full py-1 px-3 rounded-xl bg-gradient-to-r from-red-600 via-rose-600 to-red-600 text-white flex items-center justify-between shadow-lg shadow-red-600/40 border border-red-300 animate-pulse ring-2 ring-red-400/40">
                   <div className="flex items-center gap-2 min-w-0">
-                    <div className="w-7 h-7 rounded-lg bg-black/20 flex items-center justify-center shrink-0">
-                      <Zap className="w-4 h-4 text-yellow-300 fill-yellow-300" />
-                    </div>
+                    <Zap className="w-4 h-4 text-yellow-300 fill-yellow-300 shrink-0" />
                     <div className="text-left min-w-0">
                       <div className="text-xs font-black uppercase tracking-wider truncate">
                         ⚡ BREAK POINT (จะโดนเบรค!)
                       </div>
-                      <div className="text-[10px] sm:text-[11px] font-medium text-rose-100 truncate">
-                        {serverPlayerName} เสี่ยงโดนเบรก! • {pointContext.pointHolderName} มีโอกาสเบรกเกมเสิร์ฟ
+                      <div className="text-[10px] font-medium text-rose-100 truncate">
+                        {serverPlayerName} เสี่ยงโดนเบรก!
                       </div>
                     </div>
                   </div>
@@ -439,15 +361,13 @@ export const LandscapeScoreboard: React.FC<LandscapeScoreboardProps> = ({
               ) : pointContext.badgeType === 'deciding' ? (
                 <div className="w-full h-full py-1 px-3 rounded-xl bg-gradient-to-r from-amber-600 via-orange-600 to-amber-600 text-white flex items-center justify-between shadow-lg border border-amber-300 animate-pulse">
                   <div className="flex items-center gap-2 min-w-0">
-                    <div className="w-7 h-7 rounded-lg bg-black/20 flex items-center justify-center shrink-0">
-                      <Flame className="w-4 h-4 text-yellow-300" />
-                    </div>
+                    <Flame className="w-4 h-4 text-yellow-300 shrink-0" />
                     <div className="text-left min-w-0">
                       <div className="text-xs font-black uppercase tracking-wider truncate">
-                        🔥 แต้มตัดสินเกม (Deciding Point No-Ad)
+                        🔥 แต้มตัดสินเกม (Deciding Point)
                       </div>
-                      <div className="text-[10px] sm:text-[11px] font-medium text-amber-100 truncate">
-                        40-40 แต้มเดียวจบเกม! ฝ่ายรับเลือกคอร์ตรับเสิร์ฟได้
+                      <div className="text-[10px] font-medium text-amber-100 truncate">
+                        40-40 แต้มเดียวจบเกม!
                       </div>
                     </div>
                   </div>
@@ -458,15 +378,13 @@ export const LandscapeScoreboard: React.FC<LandscapeScoreboardProps> = ({
               ) : match.isFinished ? (
                 <div className="w-full h-full py-1 px-3 rounded-xl bg-emerald-950/90 border border-emerald-500/80 text-emerald-200 flex items-center justify-between shadow-md">
                   <div className="flex items-center gap-2 min-w-0">
-                    <div className="w-7 h-7 rounded-lg bg-emerald-500/20 flex items-center justify-center shrink-0">
-                      <Trophy className="w-4 h-4 text-emerald-400" />
-                    </div>
+                    <Trophy className="w-4 h-4 text-emerald-400 shrink-0" />
                     <div className="text-left min-w-0">
                       <div className="text-xs font-black text-emerald-300 uppercase tracking-wide truncate">
-                        🏆 จบการแข่งขัน (Match Finished)
+                        🏆 จบการแข่งขัน
                       </div>
-                      <div className="text-[10px] sm:text-[11px] text-emerald-200/90 truncate">
-                        การแข่งขันสิ้นสุดลงแล้ว สามารถดูกราฟหรือสร้างภาพสรุปได้
+                      <div className="text-[10px] text-emerald-200/90 truncate">
+                        การแข่งขันสิ้นสุดลงแล้ว
                       </div>
                     </div>
                   </div>
@@ -480,14 +398,12 @@ export const LandscapeScoreboard: React.FC<LandscapeScoreboardProps> = ({
               ) : isFirstServeFault ? (
                 <div className="w-full h-full py-1 px-3 rounded-xl bg-amber-950/80 border border-amber-500/70 text-amber-200 flex items-center justify-between shadow">
                   <div className="flex items-center gap-2 min-w-0">
-                    <div className="w-7 h-7 rounded-lg bg-amber-500/20 flex items-center justify-center shrink-0">
-                      <AlertTriangle className="w-4 h-4 text-amber-400 animate-pulse" />
-                    </div>
+                    <AlertTriangle className="w-4 h-4 text-amber-400 animate-pulse shrink-0" />
                     <div className="text-left min-w-0">
                       <div className="text-xs font-black text-amber-300 uppercase tracking-wide truncate">
-                        ฟอลต์เสิร์ฟแรก (1st Serve Fault)
+                        ฟอลต์เสิร์ฟแรก (1st Fault)
                       </div>
-                      <div className="text-[10px] sm:text-[11px] text-amber-200/90 truncate">
+                      <div className="text-[10px] text-amber-200/90 truncate">
                         {serverPlayerName} กำลังเสิร์ฟลูกที่สอง (2nd Serve)
                       </div>
                     </div>
@@ -497,212 +413,203 @@ export const LandscapeScoreboard: React.FC<LandscapeScoreboardProps> = ({
                   </span>
                 </div>
               ) : (
-                /* จบเกมล่าสุด • เริ่มเกมใหม่ */
                 <div className="w-full h-full py-1 px-3 rounded-xl bg-slate-800/90 border border-slate-700 text-slate-200 flex items-center justify-between shadow">
                   <div className="flex items-center gap-2 min-w-0">
-                    <div className="w-7 h-7 rounded-lg bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center shrink-0">
-                      <span className="text-sm">🎉</span>
-                    </div>
+                    <span className="text-sm">🎾</span>
                     <div className="text-left min-w-0">
                       <div className="text-xs font-black text-white truncate">
-                        จบเกมที่ผ่านมา • กำลังเริ่มเกมถัดไป
+                        กำลังแข่งขัน • เซตที่ {currentSetIndex + 1}
                       </div>
-                      <div className="text-[10px] sm:text-[11px] text-slate-300 truncate">
-                        สกอร์เซตที่ {currentSetIndex + 1}: {team1.name} {currentSet.team1Games}-{currentSet.team2Games} {team2.name}
+                      <div className="text-[10px] text-slate-300 truncate">
+                        {team1.name} {currentSet.team1Games}-{currentSet.team2Games} {team2.name}
                       </div>
                     </div>
                   </div>
                   <span className="text-[10px] bg-slate-900 border border-slate-700 text-emerald-400 font-bold px-2 py-0.5 rounded-md shrink-0 ml-1.5">
-                    เกมใหม่
+                    เซต {currentSetIndex + 1}
                   </span>
                 </div>
               )}
             </div>
           )}
 
-          {/* 2. ส่วนกลาง: แสดงคอร์ต (Tennis Court Display) */}
+          {/* 2. ส่วนกลาง: คอร์ตเทนนิสแสดงทิศทางการเสิร์ฟ */}
           <div className="flex-1 flex flex-col items-center justify-center min-h-0 w-full overflow-hidden">
             <InteractiveCourt match={match} />
           </div>
 
-          {/* 3. ส่วนล่าง: แสดงปุ่มที่สามารถกดง่าย (Structured 2-Row Referee Dock: Never Clips or Vanishes) */}
+          {/* 3. ส่วนล่าง: ศูนย์รวมปุ่มควบคุมแบบรวมที่เดียว (Unified Central Control Dock) */}
           <div className="shrink-0 pt-1.5 border-t border-slate-800/80 flex flex-col gap-1.5">
-            {/* ROW 1: Serve Fault Management */}
-            {!isFirstServeFault ? (
-              /* 1st Serve Fault - Full width button, high visibility, clean single icon */
+            {/* ROW 1: Serve Controls (จัดการการเสิร์ฟอัตโนมัติ ไม่แยกซ้ายขวา) */}
+            <div className="grid grid-cols-3 gap-1.5 w-full">
+              {/* Button 1: Ace */}
               <button
-                onClick={onFirstServeFault}
-                className="w-full h-10 sm:h-11 py-1.5 px-3 rounded-xl bg-gradient-to-r from-amber-950/90 to-amber-900/90 hover:from-amber-900 hover:to-amber-800 border-2 border-amber-500/70 text-amber-300 text-xs sm:text-sm font-black flex items-center justify-center gap-2 active:scale-98 shadow-md shadow-amber-950/40 transition"
-                title="เสิร์ฟแรกเสีย จะเปลี่ยนสถานะเป็นเสิร์ฟสอง"
+                type="button"
+                onClick={() => {
+                  if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(30);
+                  onAwardPoint(currentServerTeam, 'ace', { stroke: 'serve' });
+                }}
+                className="h-10 sm:h-11 px-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 active:scale-95 border-2 border-amber-500/60 text-amber-300 font-bold text-xs flex items-center justify-center gap-1 transition shadow-xs"
+                title={`เสิร์ฟเอซ (+1 แต้มให้ ${serverPlayerName})`}
               >
-                <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
-                <span>ฟอลต์เสิร์ฟแรก (1st Fault)</span>
+                <Zap className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                <span className="truncate">เสิร์ฟเอซ</span>
               </button>
-            ) : (
-              /* 2nd Serve Fault -> DOUBLE FAULT (2/3 width) + Let button (1/3 width) */
-              <div className="grid grid-cols-3 gap-1.5 w-full">
-                <button
-                  onClick={onSecondServeFault}
-                  className="col-span-2 h-10 sm:h-11 py-1.5 px-2 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white text-xs sm:text-sm font-black flex items-center justify-center gap-1.5 active:scale-98 shadow-xl shadow-red-950 border-2 border-red-300 animate-pulse transition"
-                  title="เสิร์ฟเสียลูกที่ 2 -> ดับเบิ้ลฟอลต์ ฝ่ายรับได้แต้มทันที"
-                >
-                  <AlertOctagon className="w-4 h-4 text-white shrink-0" />
-                  <span className="truncate">ดับเบิ้ลฟอลต์! (เสียแต้ม)</span>
-                </button>
 
+              {/* Button 2: 1st Fault or Double Fault */}
+              {!isFirstServeFault ? (
                 <button
+                  type="button"
+                  onClick={() => {
+                    if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(30);
+                    onFirstServeFault();
+                  }}
+                  className="h-10 sm:h-11 px-2 rounded-xl bg-slate-800 hover:bg-slate-750 active:scale-98 border-2 border-amber-500/50 text-amber-300 font-bold text-xs flex items-center justify-center gap-1 transition shadow-xs"
+                  title="เสิร์ฟแรกติดเน็ต/ออก -> เปลี่ยนเป็นเสิร์ฟลูกสอง"
+                >
+                  <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                  <span className="truncate">ฟอลต์แรก</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(40);
+                    onSecondServeFault();
+                  }}
+                  className="h-10 sm:h-11 px-2 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 active:scale-95 text-white font-black text-xs flex items-center justify-center gap-1 border-2 border-red-300 shadow-md animate-pulse transition"
+                  title="ดับเบิ้ลฟอลต์ -> เสียแต้มให้อีกฝ่ายทันที"
+                >
+                  <AlertOctagon className="w-3.5 h-3.5 text-white shrink-0" />
+                  <span className="truncate">ดับเบิ้ลฟอลต์</span>
+                </button>
+              )}
+
+              {/* Button 3: Let / Switch Server */}
+              {isFirstServeFault ? (
+                <button
+                  type="button"
                   onClick={onResetServeFault}
-                  className="col-span-1 h-10 sm:h-11 px-2 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-98 border-2 border-slate-700 text-slate-200 text-xs font-bold flex items-center justify-center transition"
-                  title="ยกเลิกฟอลต์เสิร์ฟแรก (เสิร์ฟใหม่ / Let)"
+                  className="h-10 sm:h-11 px-2 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-98 border-2 border-slate-700 text-slate-300 font-bold text-xs flex items-center justify-center transition"
+                  title="ยกเลิกฟอลต์ (เสิร์ฟใหม่ / Let)"
                 >
                   <span>เสิร์ฟใหม่ (Let)</span>
                 </button>
-              </div>
-            )}
+              ) : (
+                <button
+                  type="button"
+                  onClick={onToggleServer}
+                  className="h-10 sm:h-11 px-2 rounded-xl bg-slate-800 hover:bg-slate-750 active:scale-98 border-2 border-slate-700 text-slate-300 font-bold text-xs flex items-center justify-center gap-1 transition"
+                  title="สลับฝ่ายเสิร์ฟ"
+                >
+                  <RefreshCw className="w-3 h-3 text-slate-400 shrink-0" />
+                  <span className="truncate">สลับเสิร์ฟ</span>
+                </button>
+              )}
+            </div>
 
-            {/* ROW 2: Undo Point (Full Width, Easy to Tap) */}
-            <button
-              onClick={onUndo}
-              disabled={match.pointsHistory.length === 0}
-              className="h-10 sm:h-11 w-full rounded-xl bg-slate-800/90 hover:bg-slate-700 active:scale-98 disabled:opacity-30 disabled:cursor-not-allowed text-slate-200 text-xs sm:text-sm font-bold flex items-center justify-center gap-2 border-2 border-slate-700 hover:border-slate-600 transition shadow-sm"
-              title="ย้อนกลับแต้มล่าสุด (Undo Point)"
-            >
-              <RotateCcw className="w-4 h-4 text-amber-400 shrink-0" />
-              <span>ถอยแต้ม (Undo)</span>
-            </button>
+            {/* ROW 2: Detailed Shot Recording & Undo */}
+            <div className="grid grid-cols-3 gap-1.5 w-full">
+              {/* Button 1: Winner Detail */}
+              <button
+                type="button"
+                onClick={() => onOpenDetailModal('winner', currentServerTeam)}
+                className="h-10 sm:h-11 px-2 rounded-xl bg-emerald-950/70 hover:bg-emerald-900/90 active:scale-95 border-2 border-emerald-600/70 text-emerald-300 font-bold text-xs flex items-center justify-center gap-1 transition shadow-sm"
+                title="บันทึกแต้มวินเนอร์ (เลือกคนตี และสโตรก: สแมช, โฟร์แฮนด์, แบ็คแฮนด์, วอลเลย์)"
+              >
+                <Flame className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <span className="truncate">🏆 วินเนอร์...</span>
+              </button>
+
+              {/* Button 2: Error Detail */}
+              <button
+                type="button"
+                onClick={() => onOpenDetailModal('error', currentServerTeam === 'team1' ? 'team2' : 'team1')}
+                className="h-10 sm:h-11 px-2 rounded-xl bg-rose-950/70 hover:bg-rose-900/90 active:scale-95 border-2 border-rose-600/70 text-rose-300 font-bold text-xs flex items-center justify-center gap-1 transition shadow-sm"
+                title="บันทึกแต้มตีเสีย (เลือกคนตีเสีย และลักษณะการเสีย: ติดเน็ต, ออกหลัง, ออกข้าง)"
+              >
+                <AlertOctagon className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                <span className="truncate">❌ ตีเสีย...</span>
+              </button>
+
+              {/* Button 3: Undo Point */}
+              <button
+                type="button"
+                onClick={() => {
+                  if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(20);
+                  onUndo();
+                }}
+                disabled={match.pointsHistory.length === 0}
+                className="h-10 sm:h-11 px-2 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-98 disabled:opacity-30 disabled:cursor-not-allowed border-2 border-slate-700 text-slate-200 font-bold text-xs flex items-center justify-center gap-1 transition shadow-sm"
+                title="ย้อนกลับแต้มล่าสุด (Undo Point)"
+              >
+                <RotateCcw className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                <span className="truncate">ถอยแต้ม</span>
+              </button>
+            </div>
           </div>
         </div>
 
         {/* ================= RIGHT SIDE: TEAM 2 CARD (Col 9-12) ================= */}
-        <div className="col-span-4 h-full flex flex-col justify-between rounded-2xl bg-gradient-to-b from-slate-900/95 to-slate-950 border border-sky-800/60 p-2.5 relative shadow-xl overflow-hidden">
-          {/* Header & Server Toggle */}
-          <div className="flex items-center justify-between pb-1 border-b border-slate-800/80">
+        <div className="col-span-4 h-full flex flex-col justify-between rounded-2xl bg-gradient-to-b from-slate-900/95 to-slate-950 border border-sky-800/60 p-2 sm:p-2.5 relative shadow-xl overflow-hidden">
+          {/* Header */}
+          <div className="flex items-center justify-between pb-1.5 border-b border-slate-800/80 shrink-0">
             <div
               onClick={onOpenEditPlayers}
               className="flex items-center gap-1.5 cursor-pointer hover:opacity-80 transition truncate"
               title="คลิกเพื่อแก้ไขชื่อผู้เล่น"
             >
-              <h2 className="text-sm font-black text-sky-400 truncate leading-tight">
+              <h2 className="text-xs sm:text-sm font-black text-sky-400 truncate leading-tight">
                 {team2.name}
               </h2>
               <Edit3 className="w-3 h-3 text-slate-500 hover:text-sky-300 shrink-0" />
             </div>
 
             <div className="flex items-center gap-1">
-              {/* Server indicator / toggle button */}
-              <button
-                onClick={onToggleServer}
-                className={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-black transition ${
-                  isServerT2
-                    ? 'bg-yellow-400 text-slate-950 shadow animate-pulse'
-                    : 'bg-slate-800 text-slate-400 hover:text-white'
-                }`}
-                title="คลิกเพื่อกำหนดให้คนนี้เสิร์ฟ"
-              >
-                <span>🎾 {isServerT2 ? (isFirstServeFault ? 'เสิร์ฟ 2' : 'เสิร์ฟ 1') : 'รับ'}</span>
-              </button>
-
-              <span className="text-[10px] text-slate-400 font-semibold bg-slate-900 px-1.5 py-0.5 rounded border border-slate-800">
+              <span className="text-[10px] sm:text-xs font-bold text-slate-300 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
                 {currentSet.team2Games} เกม
               </span>
             </div>
           </div>
 
-          {/* Giant Score Display with Prominent Serving Badge on Head of Score */}
-          <div className="my-auto py-1 text-center flex flex-col items-center justify-center">
-            {/* Server Badge on Head of Score (โชว์บนหัวคะแนนให้เห็นชัดๆ) */}
-            <div className="w-full mb-1 flex items-center justify-center">
-              {isServerT2 ? (
-                <button
-                  type="button"
-                  onClick={onToggleServer}
-                  className="px-3 py-1 rounded-full bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-black text-xs sm:text-sm flex items-center justify-center gap-1.5 shadow-lg shadow-yellow-500/40 border border-yellow-200 transition active:scale-95 animate-pulse"
-                  title="คลิกเพื่อสลับคนเสิร์ฟ"
-                >
-                  <span className="text-sm">🎾</span>
-                  <span className="truncate">{serverPlayerName} เสิร์ฟ ({isFirstServeFault ? 'เสิร์ฟ 2' : 'เสิร์ฟ 1'})</span>
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={onToggleServer}
-                  className="px-2.5 py-0.5 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 text-[11px] font-bold border border-slate-700/80 transition active:scale-95"
-                  title="คลิกเพื่อสลับให้ฝ่ายนี้เสิร์ฟ"
-                >
-                  <span>🛡️ ฝ่ายรับเสิร์ฟ</span>
-                </button>
-              )}
-            </div>
+          {/* Giant Touch-to-Score Button (แตะที่คะแนนเพื่อเพิ่มแต้มได้โดยตรง) */}
+          <button
+            type="button"
+            onClick={() => {
+              if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(30);
+              onAwardPoint('team2', 'regular_point');
+            }}
+            className="flex-1 my-1.5 rounded-2xl bg-slate-900/60 hover:bg-sky-950/40 active:scale-95 border-2 border-sky-500/30 hover:border-sky-400/80 text-center flex flex-col items-center justify-center transition-all duration-150 cursor-pointer shadow-inner group relative overflow-hidden"
+            title="แตะที่ตัวเลขคะแนนนี้เพื่อเพิ่มแต้มให้ทีม 2 (+1 แต้ม)"
+          >
+            {/* Server Badge on Head of Score */}
+            {isServerT2 && (
+              <div className="mb-1 px-2.5 py-0.5 rounded-full bg-yellow-400 text-slate-950 font-black text-[10px] sm:text-xs flex items-center gap-1 shadow animate-pulse">
+                <span>🎾</span>
+                <span className="truncate">{serverPlayerName} เสิร์ฟ ({isFirstServeFault ? 'ลูก 2' : 'ลูก 1'})</span>
+              </div>
+            )}
 
+            {/* Giant Score Display */}
             <div
-              className={`font-mono text-5xl sm:text-6xl font-black tracking-tight drop-shadow-md ${
-                currentGame.team2Display === 'AD' ? 'text-amber-300 scale-105' : 'text-white'
+              className={`font-mono text-6xl sm:text-7xl lg:text-8xl font-black tracking-tight drop-shadow-lg transition-transform group-hover:scale-105 ${
+                currentGame.team2Display === 'AD' ? 'text-amber-300' : 'text-white'
               }`}
             >
               {currentGame.team2Display}
             </div>
+
             {currentGame.isTiebreak && (
               <span className="text-[10px] font-bold text-amber-400 uppercase tracking-widest mt-0.5">
                 TIE-BREAK
               </span>
             )}
-          </div>
 
-          {/* MAIN BUTTONS */}
-          <div className="space-y-1.5 shrink-0">
-            {/* Primary Big Point Button */}
-            <button
-              onClick={() => onAwardPoint('team2', 'regular_point')}
-              className="w-full py-2.5 sm:py-3 rounded-xl bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-500 hover:to-blue-500 active:scale-95 text-white font-black text-xs sm:text-sm shadow-lg shadow-sky-950/60 flex items-center justify-center gap-1.5 transition"
-            >
-              <Plus className="w-4 h-4 stroke-[3]" />
-              <span>+ แต้มปกติ ({team2.name.slice(0, 8)})</span>
-            </button>
-
-            {/* Popup Detail Buttons: Winner vs Error */}
-            <div className="grid grid-cols-2 gap-1.5">
-              <button
-                onClick={() => onOpenDetailModal('winner', 'team2')}
-                className="py-2 px-2 rounded-xl bg-sky-950/70 border border-sky-700/60 hover:bg-sky-900 active:scale-95 text-sky-300 text-xs font-bold flex items-center justify-center gap-1 shadow transition"
-                title="ระบุรายละเอียดลูกวินเนอร์ (โฟร์แฮนด์, แบ็คแฮนด์, วอลเลย์, สแมช)"
-              >
-                <Flame className="w-3.5 h-3.5 text-sky-400" />
-                <span>🏆 วินเนอร์...</span>
-              </button>
-
-              <button
-                onClick={() => onOpenDetailModal('error', 'team1')}
-                className="py-2 px-2 rounded-xl bg-rose-950/70 border border-rose-700/60 hover:bg-rose-900 active:scale-95 text-rose-300 text-xs font-bold flex items-center justify-center gap-1 shadow transition"
-                title="ระบุรายละเอียดคนตีเสีย (ใครตีเสีย, ตีลูกอะไร, ติดเน็ตหรือออก)"
-              >
-                <AlertOctagon className="w-3.5 h-3.5 text-rose-400" />
-                <span>❌ คู่แข่งตีเสีย...</span>
-              </button>
+            {/* Clear tap affordance label */}
+            <div className="mt-1 flex items-center gap-1 text-[10px] text-sky-400/80 font-bold group-hover:text-sky-300 transition">
+              <span>👆 แตะที่นี่เพื่อ +1 แต้ม</span>
             </div>
-
-            {/* Quick 1-Tap: Ace (if server) or Opponent Double Fault (if receiver) */}
-            <div>
-              {isServerT2 ? (
-                <button
-                  onClick={() => onAwardPoint('team2', 'ace', { stroke: 'serve' })}
-                  className="w-full py-1.5 px-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/50 text-amber-300 font-bold active:scale-95 flex items-center justify-center gap-1.5 transition text-xs shadow-xs"
-                  title="เสิร์ฟเอซ 1 แตะ"
-                >
-                  <Zap className="w-3.5 h-3.5 text-amber-400" />
-                  <span>⚡ เสิร์ฟเอซ (Ace - 1 แตะ)</span>
-                </button>
-              ) : (
-                <button
-                  onClick={onSecondServeFault}
-                  className="w-full py-1.5 px-2 rounded-xl bg-red-500/20 hover:bg-red-500/30 border border-red-500/50 text-red-300 font-bold active:scale-95 flex items-center justify-center gap-1.5 transition text-xs shadow-xs"
-                  title="คู่แข่งเสิร์ฟเสีย 2 ลูก (ดับเบิ้ลฟอลต์)"
-                >
-                  <AlertTriangle className="w-3.5 h-3.5 text-red-400" />
-                  <span>🚨 คู่แข่งเสีย 2 ลูก (Double Fault)</span>
-                </button>
-              )}
-            </div>
-          </div>
+          </button>
         </div>
       </main>
 

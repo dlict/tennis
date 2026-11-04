@@ -26,8 +26,8 @@ export function createInitialGameScore(isTiebreak = false, pointsToWin = 7): Gam
 
 export function createInitialMatch(
   settings: MatchSettings,
-  team1Name = 'Player 1',
-  team2Name = 'Player 2',
+  team1Name = 'ผู้เล่น 1',
+  team2Name = 'ผู้เล่น 2',
   team1DoublesPartner?: string,
   team2DoublesPartner?: string
 ): MatchState {
@@ -51,7 +51,7 @@ export function createInitialMatch(
       players: isDoubles
         ? [
             { id: 'p1_1', name: team1Name, shortName: team1Name.slice(0, 3).toUpperCase() },
-            { id: 'p1_2', name: team1DoublesPartner || 'Partner 1', shortName: (team1DoublesPartner || 'P1').slice(0, 3).toUpperCase() },
+            { id: 'p1_2', name: team1DoublesPartner || 'คู่หู 1', shortName: (team1DoublesPartner || 'คู่หู 1').slice(0, 3).toUpperCase() },
           ]
         : [{ id: 'p1_1', name: team1Name, shortName: team1Name.slice(0, 4).toUpperCase() }],
     },
@@ -61,7 +61,7 @@ export function createInitialMatch(
       players: isDoubles
         ? [
             { id: 'p2_1', name: team2Name, shortName: team2Name.slice(0, 3).toUpperCase() },
-            { id: 'p2_2', name: team2DoublesPartner || 'Partner 2', shortName: (team2DoublesPartner || 'P2').slice(0, 3).toUpperCase() },
+            { id: 'p2_2', name: team2DoublesPartner || 'คู่หู 2', shortName: (team2DoublesPartner || 'คู่หู 2').slice(0, 3).toUpperCase() },
           ]
         : [{ id: 'p2_1', name: team2Name, shortName: team2Name.slice(0, 4).toUpperCase() }],
     },
@@ -613,16 +613,16 @@ export function updatePlayerNames(
   const updatedT1Players = t1Players && t1Players.length > 0
     ? t1Players.map((name, i) => ({
         id: state.team1.players[i]?.id || `p1_${i}`,
-        name: name.trim() || `Player 1-${i + 1}`,
-        shortName: (name.trim() || `P1-${i + 1}`).slice(0, 3).toUpperCase(),
+        name: name.trim() || `ผู้เล่น 1-${i + 1}`,
+        shortName: (name.trim() || `1-${i + 1}`).slice(0, 3).toUpperCase(),
       }))
     : state.team1.players.map((p, i) => (i === 0 ? { ...p, name: t1Name } : p));
 
   const updatedT2Players = t2Players && t2Players.length > 0
     ? t2Players.map((name, i) => ({
         id: state.team2.players[i]?.id || `p2_${i}`,
-        name: name.trim() || `Player 2-${i + 1}`,
-        shortName: (name.trim() || `P2-${i + 1}`).slice(0, 3).toUpperCase(),
+        name: name.trim() || `ผู้เล่น 2-${i + 1}`,
+        shortName: (name.trim() || `2-${i + 1}`).slice(0, 3).toUpperCase(),
       }))
     : state.team2.players.map((p, i) => (i === 0 ? { ...p, name: t2Name } : p));
 

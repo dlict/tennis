@@ -92,6 +92,9 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ match, onClose }) 
       wide: errors.filter((p) => p.errorDetail === 'wide').length,
       forehand: errors.filter((p) => p.errorStroke === 'forehand').length,
       backhand: errors.filter((p) => p.errorStroke === 'backhand').length,
+      smash: errors.filter((p) => p.errorStroke === 'smash').length,
+      volley: errors.filter((p) => p.errorStroke === 'volley').length,
+      return: errors.filter((p) => p.errorStroke === 'return_winner' || p.errorDetail === 'unforced_return').length,
       doubleFault: doubleFaults.length,
     };
 
@@ -163,6 +166,8 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ match, onClose }) 
     { label: 'เอซเสิร์ฟ (Aces)', val1: t1.aces, val2: t2.aces, isHigherBetter: true },
     { label: 'ดับเบิ้ลฟอลต์ (Double Faults)', val1: t1.doubleFaults, val2: t2.doubleFaults, isHigherBetter: false },
     { label: 'วินเนอร์รวม (Total Winners)', val1: t1.winners, val2: t2.winners, isHigherBetter: true },
+    { label: 'สแมช / ลูกตบวินเนอร์ (Smash Winners)', val1: t1.winnersBreakdown.smash, val2: t2.winnersBreakdown.smash, isHigherBetter: true },
+    { label: 'วอลเลย์วินเนอร์ (Volley Winners)', val1: t1.winnersBreakdown.volley, val2: t2.winnersBreakdown.volley, isHigherBetter: true },
     { label: 'อันฟอร์ซเออเร่อร์ (Unforced Errors)', val1: t1.unforcedErrors, val2: t2.unforcedErrors, isHigherBetter: false },
     { label: 'เบรกพอยต์สำเร็จ (Break Points)', val1: `${t1.breakPointsWon}/${t1.breakPointsOpportunities} (${t1BpPct}%)`, val2: `${t2.breakPointsWon}/${t2.breakPointsOpportunities} (${t2BpPct}%)`, raw1: t1.breakPointsWon, raw2: t2.breakPointsWon, isHigherBetter: true },
     { label: 'แต้มหน้าเน็ต (Net Points Won)', val1: `${t1.netPointsWon}/${t1.netPointsApproaches} (${t1NetPct}%)`, val2: `${t2.netPointsWon}/${t2.netPointsApproaches} (${t2NetPct}%)`, raw1: t1.netPointsWon, raw2: t2.netPointsWon, isHigherBetter: true },
@@ -187,6 +192,23 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ match, onClose }) 
       list.push(`🔥 ${match.team1.name} เล่นเชิงรุกดุดัน ทำไป ${t1.winners} วินเนอร์ (อัตราส่วน Winner/UE: ${t1Ratio})`);
     } else if (t2.winners > t1.winners) {
       list.push(`🔥 ${match.team2.name} ทำเกมบุกได้เฉียบคมด้วย ${t2.winners} วินเนอร์ (อัตราส่วน Winner/UE: ${t2Ratio})`);
+    }
+
+    // Overhead Smash tactical insight
+    if (t1.winnersBreakdown.smash > 0 || t2.winnersBreakdown.smash > 0) {
+      if (t1.winnersBreakdown.smash > t2.winnersBreakdown.smash) {
+        list.push(`💥 ${match.team1.name} มีลูกสแมช (Overhead Smash) ที่เด็ดขาดมาก (${t1.winnersBreakdown.smash} ครั้ง) เก็บแต้มจากลูกโย่งหน้าเน็ตได้อย่างยอดเยี่ยม`);
+      } else if (t2.winnersBreakdown.smash > t1.winnersBreakdown.smash) {
+        list.push(`💥 ${match.team2.name} มีลูกสแมช (Overhead Smash) ที่ทรงพลัง (${t2.winnersBreakdown.smash} ครั้ง) เผด็จศึกคู่แข่งได้อย่างเฉียบขาด`);
+      }
+    }
+
+    // Smash unforced errors
+    if (t1.unforcedErrorsByStroke.smash >= 2) {
+      list.push(`⚠️ ${match.team1.name} มีลูกสแมชเสีย (${t1.unforcedErrorsByStroke.smash} ครั้ง) ควรปรับจังหวะก้าวถอยหลังและจุดกระทบบอล`);
+    }
+    if (t2.unforcedErrorsByStroke.smash >= 2) {
+      list.push(`⚠️ ${match.team2.name} มีลูกสแมชเสีย (${t2.unforcedErrorsByStroke.smash} ครั้ง) ควรปรับจังหวะก้าวถอยหลังและจุดกระทบบอล`);
     }
 
     // Critical error analysis
@@ -387,6 +409,9 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ match, onClose }) 
                   <div className="flex justify-between">
                     <span>FH/BH เสีย:</span> <span className="font-bold text-slate-200">{playerStats.errorDetails.forehand + playerStats.errorDetails.backhand}</span>
                   </div>
+                  <div className="flex justify-between">
+                    <span>Smash/Volley เสีย:</span> <span className="font-bold text-slate-200">{playerStats.errorDetails.smash + playerStats.errorDetails.volley}</span>
+                  </div>
                 </div>
               </div>
 
@@ -510,23 +535,95 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ match, onClose }) 
                   </div>
                 </div>
 
-                {/* Net play */}
+                {/* Smash (Overhead Smash) Dedicated Comparison */}
                 <div>
                   <div className="flex justify-between text-[11px] mb-1">
-                    <span className="text-slate-300">การเล่นหน้าเน็ต (Volley / Smash):</span>
+                    <span className="text-slate-300 flex items-center gap-1 font-semibold">
+                      <span className="text-amber-400">💥</span>
+                      <span>สแมช / ลูกตบ (Overhead Smash):</span>
+                    </span>
                     <span>
-                      <strong className="text-emerald-400">{playerStats.winnerStrokes.volley + playerStats.winnerStrokes.smash} วินเนอร์</strong>
+                      <strong className="text-emerald-400">{playerStats.winnerStrokes.smash} วินเนอร์</strong> vs{' '}
+                      <strong className="text-rose-400">{playerStats.errorDetails.smash} เออเร่อร์</strong>
                     </span>
                   </div>
                   <div className="flex h-2 rounded-full overflow-hidden bg-slate-800">
                     <div
-                      className="bg-emerald-400"
+                      className="bg-emerald-500"
                       style={{
-                        width: `${Math.min(100, (playerStats.winnerStrokes.volley + playerStats.winnerStrokes.smash) * 20)}%`,
+                        width: `${
+                          (playerStats.winnerStrokes.smash + playerStats.errorDetails.smash) > 0
+                            ? (playerStats.winnerStrokes.smash / (playerStats.winnerStrokes.smash + playerStats.errorDetails.smash)) * 100
+                            : 50
+                        }%`,
+                      }}
+                    />
+                    <div
+                      className="bg-rose-500"
+                      style={{
+                        width: `${
+                          (playerStats.winnerStrokes.smash + playerStats.errorDetails.smash) > 0
+                            ? (playerStats.errorDetails.smash / (playerStats.winnerStrokes.smash + playerStats.errorDetails.smash)) * 100
+                            : 50
+                        }%`,
                       }}
                     />
                   </div>
                 </div>
+
+                {/* Volley Comparison */}
+                <div>
+                  <div className="flex justify-between text-[11px] mb-1">
+                    <span className="text-slate-300 flex items-center gap-1">
+                      <span className="text-cyan-400">⚡</span>
+                      <span>วอลเลย์หน้าเน็ต (Volley):</span>
+                    </span>
+                    <span>
+                      <strong className="text-emerald-400">{playerStats.winnerStrokes.volley} วินเนอร์</strong> vs{' '}
+                      <strong className="text-rose-400">{playerStats.errorDetails.volley} เออเร่อร์</strong>
+                    </span>
+                  </div>
+                  <div className="flex h-2 rounded-full overflow-hidden bg-slate-800">
+                    <div
+                      className="bg-emerald-500"
+                      style={{
+                        width: `${
+                          (playerStats.winnerStrokes.volley + playerStats.errorDetails.volley) > 0
+                            ? (playerStats.winnerStrokes.volley / (playerStats.winnerStrokes.volley + playerStats.errorDetails.volley)) * 100
+                            : 50
+                        }%`,
+                      }}
+                    />
+                    <div
+                      className="bg-rose-500"
+                      style={{
+                        width: `${
+                          (playerStats.winnerStrokes.volley + playerStats.errorDetails.volley) > 0
+                            ? (playerStats.errorDetails.volley / (playerStats.winnerStrokes.volley + playerStats.errorDetails.volley)) * 100
+                            : 50
+                        }%`,
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* Drop Shot */}
+                {playerStats.winnerStrokes.dropShot > 0 && (
+                  <div>
+                    <div className="flex justify-between text-[11px] mb-1">
+                      <span className="text-slate-300 flex items-center gap-1">
+                        <span className="text-purple-400">🪶</span>
+                        <span>ดรอปช็อต / ลูกหยอด (Drop Shot):</span>
+                      </span>
+                      <span>
+                        <strong className="text-emerald-400">{playerStats.winnerStrokes.dropShot} วินเนอร์</strong>
+                      </span>
+                    </div>
+                    <div className="flex h-1.5 rounded-full overflow-hidden bg-slate-800">
+                      <div className="bg-purple-500 w-full" />
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -537,6 +634,16 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ match, onClose }) 
                 <span>คำแนะนำการเล่นเฉพาะตัวสำหรับ {selectedPlayer.name}</span>
               </div>
               <ul className="text-xs text-slate-300 space-y-1 list-disc list-inside">
+                {playerStats.winnerStrokes.smash > 0 && (
+                  <li>
+                    💥 <strong>สแมช (Overhead Smash)</strong> ดุดันเด็ดขาด ทำไปถึง {playerStats.winnerStrokes.smash} วินเนอร์ ปิดแต้มลูกโย่งได้อย่างเฉียบคม
+                  </li>
+                )}
+                {playerStats.errorDetails.smash > 0 && (
+                  <li className="text-rose-300">
+                    ⚠️ มีจังหวะ <strong>สแมชเสีย ({playerStats.errorDetails.smash} ครั้ง)</strong> ควรระวังตำแหน่งการเทคตัวและการถอยหลังให้มั่นคง
+                  </li>
+                )}
                 {playerStats.winnerStrokes.forehand > playerStats.winnerStrokes.backhand && (
                   <li>อาวุธหลักคือ <strong>โฟร์แฮนด์</strong> ที่ทำวินเนอร์ได้ถึง {playerStats.winnerStrokes.forehand} แต้ม ควรหาจังหวะวิ่งอ้อมตี Inside-out บ่อยขึ้น</li>
                 )}

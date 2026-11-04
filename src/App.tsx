@@ -18,6 +18,7 @@ import {
   setServerTeam,
   updatePlayerNames,
 } from './utils/tennisEngine';
+import { isForbiddenName, getSavedPlayerRoster } from './utils/playerRoster';
 import { initAuth } from './services/firebaseAuth';
 import { offlineSync } from './services/offlineSync';
 import { updateMatchSummarySheet } from './services/googleSheets';
@@ -39,7 +40,24 @@ export default function App() {
   // 1. Match State
   const [match, setMatch] = useState<MatchState>(() => {
     const saved = offlineSync.getLocallySavedMatch();
-    if (saved) return saved;
+    if (saved) {
+      // Purge any lingering mock names from previously cached match
+      const checkMock = (name?: string) => !name || isForbiddenName(name);
+      if (checkMock(saved.team1.name) || checkMock(saved.team2.name)) {
+        saved.team1.name = checkMock(saved.team1.name) ? 'ฝ่ายที่ 1' : saved.team1.name;
+        saved.team2.name = checkMock(saved.team2.name) ? 'ฝ่ายที่ 2' : saved.team2.name;
+        saved.team1.players = (saved.team1.players || []).map((p, i) => ({
+          ...p,
+          name: checkMock(p.name) ? (i === 0 ? 'ฝ่ายที่ 1' : 'คู่หู 1') : p.name,
+        }));
+        saved.team2.players = (saved.team2.players || []).map((p, i) => ({
+          ...p,
+          name: checkMock(p.name) ? (i === 0 ? 'ฝ่ายที่ 2' : 'คู่หู 2') : p.name,
+        }));
+        offlineSync.saveMatchLocally(saved);
+      }
+      return saved;
+    }
 
     const defaultSettings: MatchSettings = {
       type: 'singles',
@@ -49,7 +67,7 @@ export default function App() {
       finalSetTiebreak: 'standard',
       courtSurface: 'hard',
     };
-    return createInitialMatch(defaultSettings, 'นักกีฬา 1', 'นักกีฬา 2');
+    return createInitialMatch(defaultSettings, 'ฝ่ายที่ 1', 'ฝ่ายที่ 2');
   });
 
   // 2. Modals state
