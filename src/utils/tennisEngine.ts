@@ -221,8 +221,14 @@ export function getTiebreakServerInfo(
   // Turn 2: initialServerTeam, partner (other player)
   // Turn 3: otherTeam, partner (other player)
   const turnInCycle = turnIndex % 4;
-  const initialTeamInitialPlayer = initialServerTeam === 'team1' ? t1BasePlayerIndex : t2BasePlayerIndex;
-  const otherTeamInitialPlayer = initialServerTeam === 'team1' ? t2BasePlayerIndex : t1BasePlayerIndex;
+  const initialTeamInitialPlayer =
+    initialServerPlayerIndex !== undefined
+      ? initialServerPlayerIndex
+      : initialServerTeam === 'team1'
+      ? t1BasePlayerIndex
+      : t2BasePlayerIndex;
+  const otherTeamInitialPlayer =
+    initialServerTeam === 'team1' ? t2BasePlayerIndex : t1BasePlayerIndex;
 
   let serverTeam: 'team1' | 'team2';
   let serverPlayerIndex: number;
