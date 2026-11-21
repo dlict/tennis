@@ -424,6 +424,7 @@ export const MatchSetupModal: React.FC<MatchSetupModalProps> = ({
               >
                 <option value="advantage">Advantage (ดิวซ์ไม่จำกัด)</option>
                 <option value="3-deuce">ดิวซ์ 3 ลูก (แต้มตัดสินเลือกคนรับได้)</option>
+                <option value="2-deuce">ดิวซ์ 2 ลูกจบ (แต้มตัดสินเลือกคนรับได้)</option>
                 <option value="no-ad">No-Ad (40-40 แต้มตัดสินทันที)</option>
               </select>
             </div>

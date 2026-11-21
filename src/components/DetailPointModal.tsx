@@ -7,6 +7,7 @@ interface DetailPointModalProps {
   onClose: () => void;
   mode: 'winner' | 'error';
   initialTeam: 'team1' | 'team2';
+  initialPlayerName?: string;
   match: MatchState;
   onConfirm: (
     winner: 'team1' | 'team2',
@@ -27,6 +28,7 @@ export const DetailPointModal: React.FC<DetailPointModalProps> = ({
   onClose,
   mode,
   initialTeam,
+  initialPlayerName,
   match,
   onConfirm,
 }) => {
@@ -89,16 +91,23 @@ export const DetailPointModal: React.FC<DetailPointModalProps> = ({
   const team1Players = getTeamPlayers('team1');
   const team2Players = getTeamPlayers('team2');
 
-  // Initialize selection when opened or when initialTeam changes
+  // Initialize selection when opened or when initialTeam/initialPlayerName changes
   useEffect(() => {
     if (isOpen) {
       setTargetTeam(initialTeam);
       const players = initialTeam === 'team1' ? team1Players : team2Players;
+      if (initialPlayerName) {
+        const matched = players.find((p) => p.name === initialPlayerName);
+        if (matched) {
+          setSelectedPlayerName(matched.name);
+          return;
+        }
+      }
       if (players.length > 0) {
         setSelectedPlayerName(players[0].name);
       }
     }
-  }, [isOpen, initialTeam]);
+  }, [isOpen, initialTeam, initialPlayerName]);
 
   if (!isOpen) return null;
 
@@ -294,12 +303,13 @@ export const DetailPointModal: React.FC<DetailPointModalProps> = ({
             <label className="text-xs font-semibold text-emerald-300 block mb-1.5">
               ตีลูกอะไรได้วินเนอร์:
             </label>
-            <div className="grid grid-cols-3 gap-1.5 text-xs">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-xs">
               {[
                 { id: 'forehand', label: '🎾 โฟร์แฮนด์ (FH)' },
                 { id: 'backhand', label: '🎾 แบ็คแฮนด์ (BH)' },
                 { id: 'smash', label: '💥 สแมช / ลูกตบ' },
                 { id: 'volley', label: '⚡ วอลเลย์หน้าเน็ต' },
+                { id: 'drive_volley', label: '🚀 ไดรฟ์วอลเลย์' },
                 { id: 'drop_shot', label: '🪶 ดรอปช็อต' },
                 { id: 'return_winner', label: '🎯 รีเทิร์นวินเนอร์' },
               ].map((item) => (
@@ -307,7 +317,7 @@ export const DetailPointModal: React.FC<DetailPointModalProps> = ({
                   key={item.id}
                   type="button"
                   onClick={() => setSelectedStroke(item.id as StrokeType)}
-                  className={`py-2 px-1 rounded-lg border font-semibold transition text-center cursor-pointer ${
+                  className={`py-2 px-1.5 rounded-lg border font-semibold transition text-center cursor-pointer ${
                     selectedStroke === item.id
                       ? 'bg-emerald-500/25 border-emerald-400 text-emerald-200 shadow font-bold'
                       : 'bg-slate-800/80 border-slate-700 text-slate-300 hover:bg-slate-800'
@@ -328,12 +338,13 @@ export const DetailPointModal: React.FC<DetailPointModalProps> = ({
               <label className="text-xs font-semibold text-rose-300 block mb-1.5">
                 ตีลูกอะไรเสีย:
               </label>
-              <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5 text-xs">
+              <div className="grid grid-cols-3 gap-1.5 text-xs">
                 {[
                   { id: 'forehand', label: 'โฟร์แฮนด์' },
                   { id: 'backhand', label: 'แบ็คแฮนด์' },
                   { id: 'smash', label: '💥 สแมช' },
                   { id: 'volley', label: '⚡ วอลเลย์' },
+                  { id: 'drive_volley', label: '🚀 ไดรฟ์วอลเลย์' },
                   { id: 'return_winner', label: '🎯 รับเสิร์ฟ' },
                 ].map((item) => (
                   <button
@@ -352,16 +363,17 @@ export const DetailPointModal: React.FC<DetailPointModalProps> = ({
               </div>
             </div>
 
-            {/* How did it fail: Net / Wide / Long */}
+            {/* How did it fail: Net / Wide / Long / Frame */}
             <div>
               <label className="text-xs font-semibold text-slate-300 block mb-1.5">
                 ลักษณะที่ตีเสีย:
               </label>
-              <div className="grid grid-cols-3 gap-1.5 text-xs">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-xs">
                 {[
                   { id: 'net', label: 'ติดเน็ต (Net)' },
                   { id: 'wide', label: 'ออกข้าง (Wide)' },
                   { id: 'long', label: 'ออกหลัง (Long)' },
+                  { id: 'frame', label: '🪵 ขอบไม้ (Frame)' },
                 ].map((item) => (
                   <button
                     key={item.id}

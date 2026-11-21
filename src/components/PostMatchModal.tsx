@@ -334,9 +334,17 @@ export const PostMatchModal: React.FC<PostMatchModalProps> = ({
                 )}
 
                 {renderStatBar(
+                  'เสิร์ฟสองเข้า % (2nd Serve In)',
+                  `${t1Stats.secondServesAttempted > 0 ? Math.round((t1Stats.secondServesIn / t1Stats.secondServesAttempted) * 100) : 0}% (${t1Stats.secondServesIn}/${t1Stats.secondServesAttempted})`,
+                  `${t2Stats.secondServesAttempted > 0 ? Math.round((t2Stats.secondServesIn / t2Stats.secondServesAttempted) * 100) : 0}% (${t2Stats.secondServesIn}/${t2Stats.secondServesAttempted})`,
+                  t1Stats.secondServesIn,
+                  t2Stats.secondServesIn
+                )}
+
+                {renderStatBar(
                   'ชนะแต้มเสิร์ฟสอง (2nd Serve Win Rate)',
-                  `${t1Stats.secondServesIn > 0 ? Math.round((t1Stats.secondServePointsWon / t1Stats.secondServesIn) * 100) : 0}%`,
-                  `${t2Stats.secondServesIn > 0 ? Math.round((t2Stats.secondServePointsWon / t2Stats.secondServesIn) * 100) : 0}%`,
+                  `${t1Stats.secondServesAttempted > 0 ? Math.round((t1Stats.secondServePointsWon / t1Stats.secondServesAttempted) * 100) : 0}% (${t1Stats.secondServePointsWon}/${t1Stats.secondServesAttempted})`,
+                  `${t2Stats.secondServesAttempted > 0 ? Math.round((t2Stats.secondServePointsWon / t2Stats.secondServesAttempted) * 100) : 0}% (${t2Stats.secondServePointsWon}/${t2Stats.secondServesAttempted})`,
                   t1Stats.secondServePointsWon,
                   t2Stats.secondServePointsWon
                 )}

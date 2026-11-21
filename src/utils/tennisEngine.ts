@@ -146,6 +146,9 @@ export function isDecidingPointState(currentGame: GameScore, adRule: AdRule): bo
   if (adRule === 'no-ad') {
     return currentGame.team1Points === 3 && currentGame.team2Points === 3;
   }
+  if (adRule === '2-deuce') {
+    return currentGame.team1Points === 4 && currentGame.team2Points === 4;
+  }
   if (adRule === '3-deuce') {
     return currentGame.team1Points === 5 && currentGame.team2Points === 5;
   }
@@ -165,7 +168,11 @@ export function formatStandardGameScore(
     if (t1Pts === t2Pts) {
       return { team1: '40', team2: '40', isDeuce: true, deuceCount };
     }
-    if (adRule === 'no-ad' || (adRule === '3-deuce' && Math.min(t1Pts, t2Pts) >= 5)) {
+    if (
+      adRule === 'no-ad' ||
+      (adRule === '2-deuce' && Math.min(t1Pts, t2Pts) >= 4) ||
+      (adRule === '3-deuce' && Math.min(t1Pts, t2Pts) >= 5)
+    ) {
       // Sudden death at deciding point, next point wins directly
       return { team1: '40', team2: '40', isDeuce: true, deuceCount };
     }
@@ -432,6 +439,31 @@ export function getNextGameState(
           decidingReceiverPlayerIndex: undefined,
         };
       }
+    } else if (adRule === '2-deuce') {
+      if (
+        (newT1GamePts >= 4 && newT1GamePts - newT2GamePts >= 2) ||
+        (newT1GamePts >= 5 && newT1GamePts > newT2GamePts)
+      ) {
+        gameWonBy = 'team1';
+      } else if (
+        (newT2GamePts >= 4 && newT2GamePts - newT1GamePts >= 2) ||
+        (newT2GamePts >= 5 && newT2GamePts > newT1GamePts)
+      ) {
+        gameWonBy = 'team2';
+      } else {
+        const fmt = formatStandardGameScore(newT1GamePts, newT2GamePts, '2-deuce');
+        newGameScore = {
+          ...currentGame,
+          team1Points: newT1GamePts,
+          team2Points: newT2GamePts,
+          team1Display: fmt.team1,
+          team2Display: fmt.team2,
+          isDeuce: fmt.isDeuce,
+          deuceCount: fmt.deuceCount,
+          decidingServeCourt: undefined,
+          decidingReceiverPlayerIndex: undefined,
+        };
+      }
     } else if (adRule === '3-deuce') {
       if (
         (newT1GamePts >= 4 && newT1GamePts - newT2GamePts >= 2) ||
@@ -659,7 +691,12 @@ export function detectPointContext(state: MatchState): PointContextResult {
       ? serverName
       : receiverName;
 
-    const ruleLabel = settings.adRule === '3-deuce' ? 'ดิวซ์ 3/3 (ลูกสุดท้าย!)' : '40-40 (แต้มตัดสิน)';
+    const ruleLabel =
+      settings.adRule === '2-deuce'
+        ? 'ดิวซ์ 2/2 (ลูกสุดท้าย!)'
+        : settings.adRule === '3-deuce'
+        ? 'ดิวซ์ 3/3 (ลูกสุดท้าย!)'
+        : '40-40 (แต้มตัดสิน)';
 
     return {
       isBreakPoint: true,
@@ -1456,10 +1493,10 @@ export function calculateMatchStats(pointsHistory: PointRecord[], sets: SetScore
     aces: 0,
     doubleFaults: 0,
     winners: 0,
-    winnersBreakdown: { forehand: 0, backhand: 0, volley: 0, smash: 0, dropShot: 0, returnWinner: 0 },
+    winnersBreakdown: { forehand: 0, backhand: 0, volley: 0, driveVolley: 0, smash: 0, dropShot: 0, returnWinner: 0 },
     unforcedErrors: 0,
-    unforcedErrorsBreakdown: { net: 0, wide: 0, long: 0 },
-    unforcedErrorsByStroke: { forehand: 0, backhand: 0, volley: 0, smash: 0, return: 0 },
+    unforcedErrorsBreakdown: { net: 0, wide: 0, long: 0, frame: 0 },
+    unforcedErrorsByStroke: { forehand: 0, backhand: 0, volley: 0, driveVolley: 0, smash: 0, return: 0 },
     breakPointsWon: 0,
     breakPointsOpportunities: 0,
     netPointsWon: 0,
@@ -1495,7 +1532,8 @@ export function calculateMatchStats(pointsHistory: PointRecord[], sets: SetScore
       serverStats.servicePointsWon += 1;
     }
 
-    if (!pt.isSecondServe) {
+    const isSecondServePt = Boolean(pt.isSecondServe || pt.category === 'double_fault');
+    if (!isSecondServePt) {
       serverStats.firstServesAttempted += 1;
       serverStats.firstServesIn += 1;
       if (isServerWinner) {
@@ -1528,6 +1566,10 @@ export function calculateMatchStats(pointsHistory: PointRecord[], sets: SetScore
         winnerStats.winnersBreakdown.volley += 1;
         winnerStats.netPointsWon += 1;
         winnerStats.netPointsApproaches += 1;
+      } else if (pt.stroke === 'drive_volley') {
+        winnerStats.winnersBreakdown.driveVolley += 1;
+        winnerStats.netPointsWon += 1;
+        winnerStats.netPointsApproaches += 1;
       } else if (pt.stroke === 'smash') {
         winnerStats.winnersBreakdown.smash += 1;
         winnerStats.netPointsWon += 1;
@@ -1541,11 +1583,13 @@ export function calculateMatchStats(pointsHistory: PointRecord[], sets: SetScore
       if (pt.errorDetail === 'net') errorStats.unforcedErrorsBreakdown.net += 1;
       else if (pt.errorDetail === 'wide') errorStats.unforcedErrorsBreakdown.wide += 1;
       else if (pt.errorDetail === 'long') errorStats.unforcedErrorsBreakdown.long += 1;
+      else if (pt.errorDetail === 'frame') errorStats.unforcedErrorsBreakdown.frame += 1;
 
       // Unforced error by stroke
       if (pt.errorStroke === 'forehand') errorStats.unforcedErrorsByStroke.forehand += 1;
       else if (pt.errorStroke === 'backhand') errorStats.unforcedErrorsByStroke.backhand += 1;
       else if (pt.errorStroke === 'volley') errorStats.unforcedErrorsByStroke.volley += 1;
+      else if (pt.errorStroke === 'drive_volley') errorStats.unforcedErrorsByStroke.driveVolley += 1;
       else if (pt.errorStroke === 'smash') errorStats.unforcedErrorsByStroke.smash += 1;
       else if (pt.errorStroke === 'return_winner' || pt.errorDetail === 'unforced_return') {
         errorStats.unforcedErrorsByStroke.return += 1;

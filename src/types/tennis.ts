@@ -8,7 +8,7 @@ export type MatchFormat = '1set' | '3sets' | '5sets' | 'pro8';
 
 export type TiebreakFormat = 'standard7' | 'super10';
 
-export type AdRule = 'advantage' | '3-deuce' | 'no-ad';
+export type AdRule = 'advantage' | '3-deuce' | '2-deuce' | 'no-ad';
 
 export interface Player {
   id: string;
@@ -62,6 +62,7 @@ export type StrokeType =
   | 'forehand'
   | 'backhand'
   | 'volley'
+  | 'drive_volley'
   | 'smash'
   | 'drop_shot'
   | 'return_winner'
@@ -72,6 +73,7 @@ export type ErrorDetail =
   | 'net'
   | 'wide'
   | 'long'
+  | 'frame'
   | 'foot_fault'
   | 'unforced_return';
 
@@ -177,6 +179,7 @@ export interface TeamStats {
     forehand: number;
     backhand: number;
     volley: number;
+    driveVolley: number;
     smash: number;
     dropShot: number;
     returnWinner: number;
@@ -187,12 +190,14 @@ export interface TeamStats {
     net: number;
     wide: number;
     long: number;
+    frame: number;
   };
 
   unforcedErrorsByStroke: {
     forehand: number;
     backhand: number;
     volley: number;
+    driveVolley: number;
     smash: number;
     return: number;
   };

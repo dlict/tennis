@@ -404,6 +404,7 @@ export const EditPlayerModal: React.FC<EditPlayerModalProps> = ({
             >
               <option value="advantage">Advantage (ดิวซ์ไม่จำกัด)</option>
               <option value="3-deuce">ดิวซ์ 3 ลูก (3-Deuce • แต้มตัดสินเลือกคนรับได้)</option>
+              <option value="2-deuce">ดิวซ์ 2 ลูกจบ (2-Deuce • แต้มตัดสินเลือกคนรับได้)</option>
               <option value="no-ad">No-Ad (40-40 แต้มตัดสินทันที)</option>
             </select>
           </div>

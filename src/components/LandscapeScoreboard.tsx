@@ -37,7 +37,7 @@ interface LandscapeScoreboardProps {
       errorDetail?: ErrorDetail;
     }
   ) => void;
-  onOpenDetailModal: (mode: 'winner' | 'error', team: 'team1' | 'team2') => void;
+  onOpenDetailModal: (mode: 'winner' | 'error', team: 'team1' | 'team2', playerName?: string) => void;
   onOpenEditPlayers: () => void;
   onUndo: () => void;
   onFirstServeFault: () => void;
@@ -294,7 +294,7 @@ export const LandscapeScoreboard: React.FC<LandscapeScoreboardProps> = ({
             pointContext.badgeType === 'set' ||
             pointContext.badgeType === 'break' ||
             pointContext.badgeType === 'deciding' ||
-            (match.settings.adRule === '3-deuce' && deuceCount > 0) ||
+            ((match.settings.adRule === '2-deuce' || match.settings.adRule === '3-deuce') && deuceCount > 0) ||
             match.isFinished ||
             isFirstServeFault ||
             (currentGame.team1Points === 0 && currentGame.team2Points === 0 && totalGamesInSet > 0)) && (
@@ -306,7 +306,9 @@ export const LandscapeScoreboard: React.FC<LandscapeScoreboardProps> = ({
                     <div className="text-left min-w-0">
                       <div className="text-[11px] sm:text-xs font-black tracking-wide flex items-center gap-1.5 flex-wrap">
                         <span>
-                          {match.settings.adRule === '3-deuce'
+                          {match.settings.adRule === '2-deuce'
+                            ? '🔥 ดิวซ์ 2/2 (ลูกสุดท้าย!)'
+                            : match.settings.adRule === '3-deuce'
                             ? '🔥 ดิวซ์ 3/3 (ลูกสุดท้าย!)'
                             : '🔥 40-40 แต้มตัดสิน'}
                         </span>
@@ -420,8 +422,8 @@ export const LandscapeScoreboard: React.FC<LandscapeScoreboardProps> = ({
                       </div>
                       <div className="text-[10px] font-medium text-rose-100 truncate">
                         {serverPlayerName} เสี่ยงโดนเบรก!
-                        {match.settings.adRule === '3-deuce' && deuceCount > 0
-                          ? ` • ดิวซ์ ${deuceCount}/3`
+                        {(match.settings.adRule === '2-deuce' || match.settings.adRule === '3-deuce') && deuceCount > 0
+                          ? ` • ดิวซ์ ${deuceCount}/${match.settings.adRule === '2-deuce' ? 2 : 3}`
                           : ''}
                       </div>
                     </div>
@@ -430,23 +432,23 @@ export const LandscapeScoreboard: React.FC<LandscapeScoreboardProps> = ({
                     จะโดนเบรค
                   </span>
                 </div>
-              ) : match.settings.adRule === '3-deuce' && deuceCount > 0 ? (
+              ) : (match.settings.adRule === '2-deuce' || match.settings.adRule === '3-deuce') && deuceCount > 0 ? (
                 <div className="w-full h-full py-1 px-3 rounded-xl bg-gradient-to-r from-indigo-900/95 via-slate-800 to-indigo-900/95 border border-indigo-400/60 text-indigo-100 flex items-center justify-between shadow">
                   <div className="flex items-center gap-2 min-w-0">
                     <Flame className="w-4 h-4 text-amber-400 shrink-0" />
                     <div className="text-left min-w-0">
                       <div className="text-xs font-black text-white truncate">
-                        กติกา ดิวซ์ 3 ลูก • ดิวซ์ครั้งที่ {deuceCount} / 3
+                        กติกา ดิวซ์ {match.settings.adRule === '2-deuce' ? 2 : 3} ลูก • ดิวซ์ครั้งที่ {deuceCount} / {match.settings.adRule === '2-deuce' ? 2 : 3}
                       </div>
                       <div className="text-[10px] text-indigo-200 truncate">
-                        {deuceCount === 2
+                        {deuceCount === (match.settings.adRule === '2-deuce' ? 1 : 2)
                           ? 'หากกลับมา 40-40 อีกครั้ง จะเป็นแต้มตัดสินเกมทันที!'
                           : 'เล่นได้เปรียบ (Ad) ตามปกติ'}
                       </div>
                     </div>
                   </div>
                   <span className="text-[10px] bg-indigo-950 border border-indigo-400/50 text-amber-300 font-black px-2 py-0.5 rounded-md shrink-0 ml-1.5">
-                    ดิวซ์ {deuceCount}/3
+                    ดิวซ์ {deuceCount}/{match.settings.adRule === '2-deuce' ? 2 : 3}
                   </span>
                 </div>
               ) : match.isFinished ? (
@@ -512,6 +514,7 @@ export const LandscapeScoreboard: React.FC<LandscapeScoreboardProps> = ({
             <InteractiveCourt
               match={match}
               onSelectDecidingCourt={(serveCourt) => onSelectDecidingReceiver({ serveCourt })}
+              onSelectPlayerError={(team, playerName) => onOpenDetailModal('error', team, playerName)}
             />
           </div>
         </div>

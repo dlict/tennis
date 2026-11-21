@@ -30,6 +30,7 @@ const STROKE_TRANSLATIONS: Record<string, string> = {
   forehand: 'โฟร์แฮนด์',
   backhand: 'แบ็คแฮนด์',
   volley: 'วอลเลย์หน้าเน็ต',
+  drive_volley: 'ไดรฟ์วอลเลย์',
   smash: 'สแมช',
   drop_shot: 'ดรอปช็อต',
   return_winner: 'รีเทิร์น',
@@ -40,6 +41,7 @@ const ERROR_DETAIL_TRANSLATIONS: Record<string, string> = {
   net: 'ติดเน็ต',
   wide: 'ออกข้าง',
   long: 'ออกหลัง',
+  frame: 'ขอบไม้',
   unforced_return: 'รับเสิร์ฟเสีย',
   foot_fault: 'ฟุตฟอลต์',
 };

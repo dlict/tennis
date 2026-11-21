@@ -12,6 +12,7 @@ interface InteractiveCourtProps {
   onZoneSelect?: (zone: string) => void;
   selectedZone?: string | null;
   onSelectDecidingCourt?: (court: 'deuce' | 'ad') => void;
+  onSelectPlayerError?: (team: 'team1' | 'team2', playerName: string) => void;
 }
 
 interface PlayerPosition {
@@ -53,8 +54,11 @@ function approxQuadLength(
 /**
  * Standing tennis player SVG figure with racket, team kit, cap, and ground halo
  */
-const StandingPlayer: React.FC<{ player: PlayerPosition }> = ({ player }) => {
-  const { x, y, facing, team, role } = player;
+const StandingPlayer: React.FC<{
+  player: PlayerPosition;
+  onClick?: (e: React.MouseEvent) => void;
+}> = ({ player, onClick }) => {
+  const { x, y, facing, team, role, name } = player;
   const flipX = facing === 'left' ? -1 : 1;
 
   const isTeam1 = team === 'team1';
@@ -68,7 +72,16 @@ const StandingPlayer: React.FC<{ player: PlayerPosition }> = ({ player }) => {
   const isReceiver = role === 'receiver';
 
   return (
-    <g transform={`translate(${x}, ${y})`}>
+    <g
+      transform={`translate(${x}, ${y})`}
+      onClick={onClick}
+      className={onClick ? 'pointer-events-auto cursor-pointer group' : undefined}
+    >
+      {onClick && <title>{`แตะที่ ${name} เพื่อบันทึกตีเสีย`}</title>}
+      {/* Generous invisible hit area for effortless mobile tapping */}
+      {onClick && (
+        <rect x={-12} y={-17} width={24} height={28} rx={4} fill="transparent" />
+      )}
       {/* Ground Highlight Halo for Server / Receiver */}
       {isServer && (
         <ellipse
@@ -207,6 +220,7 @@ export const InteractiveCourt: React.FC<InteractiveCourtProps> = ({
   onZoneSelect,
   selectedZone,
   onSelectDecidingCourt,
+  onSelectPlayerError,
 }) => {
   const { currentGame, currentServerTeam, sets, currentSetIndex, settings } = match;
   const currentSet = sets[currentSetIndex];
@@ -634,9 +648,21 @@ export const InteractiveCourt: React.FC<InteractiveCourtProps> = ({
             strokeLinecap="round"
           />
 
-          {/* 2. Standing Tennis Players (2 in Singles, 4 in Doubles) */}
+          {/* 2. Standing Tennis Players (2 in Singles, 4 in Doubles - Tap to record Error!) */}
           {playersList.map((p, idx) => (
-            <StandingPlayer key={`${p.role}-${idx}-${p.name}`} player={p} />
+            <StandingPlayer
+              key={`${p.role}-${idx}-${p.name}`}
+              player={p}
+              onClick={
+                onSelectPlayerError
+                  ? (e) => {
+                      e.stopPropagation();
+                      if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(25);
+                      onSelectPlayerError(p.team, p.name);
+                    }
+                  : undefined
+              }
+            />
           ))}
 
           {/* 3. Bounce Impact Ripple inside Target Service Box (timed at 60% of 2.6s loop) */}
@@ -756,14 +782,25 @@ export const InteractiveCourt: React.FC<InteractiveCourtProps> = ({
           const isReceiver = p.role === 'receiver';
 
           return (
-            <div
+            <button
               key={`label-${p.role}-${idx}`}
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(25);
+                onSelectPlayerError?.(p.team, p.name);
+              }}
               style={{
                 left: `${leftPct}%`,
                 top: `${topPct}%`,
                 transform: `translate(${translateX}, 0)`,
               }}
-              className="absolute z-30 pointer-events-none transition-all duration-300"
+              className={`absolute z-30 transition-all duration-200 ${
+                onSelectPlayerError
+                  ? 'pointer-events-auto cursor-pointer hover:scale-110 active:scale-95'
+                  : 'pointer-events-none'
+              }`}
+              title={`แตะที่ ${p.name} เพื่อบันทึกตีเสีย`}
             >
               <div
                 className={`flex items-center justify-center px-1.5 py-[1px] rounded-full shadow-md border text-[7.5px] sm:text-[8.5px] leading-tight font-bold text-center whitespace-normal break-words max-w-[76px] backdrop-blur-xs ${
@@ -778,7 +815,7 @@ export const InteractiveCourt: React.FC<InteractiveCourtProps> = ({
               >
                 <span>{p.name}</span>
               </div>
-            </div>
+            </button>
           );
         })}
 

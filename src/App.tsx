@@ -98,6 +98,7 @@ export default function App() {
     isOpen: boolean;
     mode: 'winner' | 'error';
     team: 'team1' | 'team2';
+    playerName?: string;
   }>({
     isOpen: false,
     mode: 'winner',
@@ -392,7 +393,9 @@ export default function App() {
       <LandscapeScoreboard
         match={match}
         onAwardPoint={handleAwardPoint}
-        onOpenDetailModal={(mode, team) => setDetailModal({ isOpen: true, mode, team })}
+        onOpenDetailModal={(mode, team, playerName) =>
+          setDetailModal({ isOpen: true, mode, team, playerName })
+        }
         onOpenEditPlayers={() => setIsEditPlayersOpen(true)}
         onUndo={handleUndo}
         onFirstServeFault={handleFirstServeFault}
@@ -436,9 +439,10 @@ export default function App() {
       {detailModal.isOpen && (
         <DetailPointModal
           isOpen={detailModal.isOpen}
-          onClose={() => setDetailModal((prev) => ({ ...prev, isOpen: false }))}
+          onClose={() => setDetailModal((prev) => ({ ...prev, isOpen: false, playerName: undefined }))}
           mode={detailModal.mode}
           initialTeam={detailModal.team}
+          initialPlayerName={detailModal.playerName}
           match={match}
           onConfirm={(winner, cat, details) => handleAwardPoint(winner, cat, details)}
         />
@@ -487,18 +491,16 @@ export default function App() {
         </div>
       )}
 
-      {/* Analytics & Form Visualizer Modal */}
+      {/* Analytics & Form Visualizer (Full-Screen View) */}
       {isAnalyticsOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-3">
-          <div className="w-full max-w-2xl h-[92vh]">
-            <AnalyticsView
-              match={inspectedMatch || match}
-              onClose={() => {
-                setIsAnalyticsOpen(false);
-                setInspectedMatch(null);
-              }}
-            />
-          </div>
+        <div className="fixed inset-0 z-50 w-screen h-screen bg-slate-950">
+          <AnalyticsView
+            match={inspectedMatch || match}
+            onClose={() => {
+              setIsAnalyticsOpen(false);
+              setInspectedMatch(null);
+            }}
+          />
         </div>
       )}
 
