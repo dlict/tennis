@@ -1,10 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { MatchState } from '../types/tennis';
 import {
   APPS_SCRIPT_CODE,
-  clearSheetsConnection,
+  clearSheetsConnectionPersistent,
+  getDraftWebhookUrl,
+  saveDraftWebhookUrl,
+  saveSheetsConnectionPersistent,
   syncAllPointsToSheet,
   testSheetsConnection,
+  validateWebhookUrl,
 } from '../services/googleSheets';
 import { offlineSync } from '../services/offlineSync';
 import {
@@ -36,6 +40,7 @@ interface SheetsSyncModalProps {
     sheetUrl: string | null;
     sheetTitle: string | null;
   }) => void;
+  onSavedAndHidden?: () => void;
   match: MatchState;
   isOnline: boolean;
   pendingSyncCount: number;
@@ -48,11 +53,12 @@ export const SheetsSyncModal: React.FC<SheetsSyncModalProps> = ({
   activeSheetUrl,
   activeSheetTitle,
   onConnectionUpdated,
+  onSavedAndHidden,
   match,
   isOnline,
   pendingSyncCount,
 }) => {
-  const [urlInput, setUrlInput] = useState(webhookUrl || '');
+  const [urlInput, setUrlInput] = useState(() => webhookUrl || getDraftWebhookUrl() || '');
   const [isEditingUrl, setIsEditingUrl] = useState(!webhookUrl);
   const [showGuide, setShowGuide] = useState(!webhookUrl);
   const [isConnecting, setIsConnecting] = useState(false);
@@ -60,20 +66,39 @@ export const SheetsSyncModal: React.FC<SheetsSyncModalProps> = ({
   const [copiedScript, setCopiedScript] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [canForceSaveUrl, setCanForceSaveUrl] = useState(false);
+  const autoCloseTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (isOpen) {
-      setUrlInput(webhookUrl || '');
+      setUrlInput(webhookUrl || getDraftWebhookUrl() || '');
       setIsEditingUrl(!webhookUrl);
       setShowGuide(!webhookUrl);
       setErrorMessage(null);
       setSuccessMessage(null);
+      setCanForceSaveUrl(false);
     }
+    return () => {
+      if (autoCloseTimerRef.current) {
+        window.clearTimeout(autoCloseTimerRef.current);
+        autoCloseTimerRef.current = null;
+      }
+    };
   }, [isOpen, webhookUrl]);
 
   if (!isOpen) return null;
 
   const isConnected = Boolean(webhookUrl);
+
+  const scheduleAutoHide = (delayMs = 650) => {
+    if (autoCloseTimerRef.current) {
+      window.clearTimeout(autoCloseTimerRef.current);
+    }
+    autoCloseTimerRef.current = window.setTimeout(() => {
+      onSavedAndHidden?.();
+      onClose();
+    }, delayMs);
+  };
 
   const handleCopyScript = async () => {
     try {
@@ -85,16 +110,55 @@ export const SheetsSyncModal: React.FC<SheetsSyncModalProps> = ({
     }
   };
 
+  const handleForceSaveAndHide = async () => {
+    setErrorMessage(null);
+    setCanForceSaveUrl(false);
+    try {
+      const validUrl = validateWebhookUrl(urlInput);
+      await saveSheetsConnectionPersistent({ webhookUrl: validUrl });
+      onConnectionUpdated({
+        webhookUrl: validUrl,
+        sheetUrl: activeSheetUrl,
+        sheetTitle: activeSheetTitle,
+      });
+      setIsEditingUrl(false);
+      setShowGuide(false);
+      setSuccessMessage('บันทึกลิงก์ Google Sheet ถาวรแล้ว! กำลังซ่อนหน้าต่างอัตโนมัติ...');
+      scheduleAutoHide(650);
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'รูปแบบลิงก์ไม่ถูกต้อง');
+    }
+  };
+
   const handleConnectAndSync = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     setIsConnecting(true);
     setErrorMessage(null);
     setSuccessMessage(null);
+    setCanForceSaveUrl(false);
 
     try {
-      const info = await testSheetsConnection(urlInput);
-      // Immediately initialize/sync current match into the connected Google Sheet
+      const validUrl = validateWebhookUrl(urlInput);
+      saveDraftWebhookUrl(validUrl);
+
+      // If offline, permanently save immediately & auto-hide without waiting for network
+      if (!isOnline) {
+        await saveSheetsConnectionPersistent({ webhookUrl: validUrl });
+        onConnectionUpdated({
+          webhookUrl: validUrl,
+          sheetUrl: activeSheetUrl,
+          sheetTitle: activeSheetTitle,
+        });
+        setIsEditingUrl(false);
+        setShowGuide(false);
+        setSuccessMessage('บันทึก Google Sheet ถาวรแล้ว! ระบบซ่อนหน้าต่างและจะซิงค์ทันทีที่ต่อเน็ต');
+        scheduleAutoHide(800);
+        return;
+      }
+
+      const info = await testSheetsConnection(validUrl);
       await syncAllPointsToSheet(info.webhookUrl, match);
+      await saveSheetsConnectionPersistent(info);
       onConnectionUpdated({
         webhookUrl: info.webhookUrl,
         sheetUrl: info.spreadsheetUrl || null,
@@ -103,11 +167,19 @@ export const SheetsSyncModal: React.FC<SheetsSyncModalProps> = ({
       setIsEditingUrl(false);
       setShowGuide(false);
       setSuccessMessage(
-        `เชื่อมต่อกับ "${info.title || 'Google Sheet'}" สำเร็จ! ระบบจะซิงค์ตลอดเวลาโดยไม่ต้องล็อกอินอีก`
+        `บันทึก "${info.title || 'Google Sheet'}" ถาวรแล้ว! ระบบซ่อนหน้าต่างและซิงค์ให้อัตโนมัติตลอดเวลา`
       );
+      scheduleAutoHide(700);
     } catch (err: any) {
       console.warn('Sheets connection warning:', err);
-      setErrorMessage(err.message || 'ไม่สามารถเชื่อมต่อ Google Sheet ได้');
+      const msg = err?.message || 'ไม่สามารถเชื่อมต่อ Google Sheet ได้';
+      setErrorMessage(msg);
+      try {
+        validateWebhookUrl(urlInput);
+        setCanForceSaveUrl(true);
+      } catch {
+        setCanForceSaveUrl(false);
+      }
     } finally {
       setIsConnecting(false);
     }
@@ -124,6 +196,7 @@ export const SheetsSyncModal: React.FC<SheetsSyncModalProps> = ({
     try {
       const info = await syncAllPointsToSheet(webhookUrl, match);
       await offlineSync.processQueue();
+      await saveSheetsConnectionPersistent(info);
       onConnectionUpdated({
         webhookUrl: info.webhookUrl,
         sheetUrl: info.spreadsheetUrl || activeSheetUrl,
@@ -138,14 +211,15 @@ export const SheetsSyncModal: React.FC<SheetsSyncModalProps> = ({
     }
   };
 
-  const handleDisconnect = () => {
-    clearSheetsConnection();
+  const handleDisconnect = async () => {
+    await clearSheetsConnectionPersistent();
     onConnectionUpdated({ webhookUrl: null, sheetUrl: null, sheetTitle: null });
     setUrlInput('');
     setIsEditingUrl(true);
     setShowGuide(true);
     setSuccessMessage(null);
     setErrorMessage(null);
+    setCanForceSaveUrl(false);
   };
 
   return (
@@ -220,9 +294,20 @@ export const SheetsSyncModal: React.FC<SheetsSyncModalProps> = ({
 
           {/* Feedback messages */}
           {errorMessage && (
-            <div className="p-2.5 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-[11px] flex items-start gap-2">
-              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-              <span className="leading-relaxed">{errorMessage}</span>
+            <div className="p-2.5 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-[11px] space-y-2">
+              <div className="flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                <span className="leading-relaxed">{errorMessage}</span>
+              </div>
+              {canForceSaveUrl && (
+                <button
+                  type="button"
+                  onClick={handleForceSaveAndHide}
+                  className="w-full py-1.5 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-600 text-emerald-300 font-bold text-[11px] transition"
+                >
+                  บันทึกลิงก์นี้ไว้ถาวรและซ่อนหน้าต่างเลย (ซิงค์อัตโนมัติทีหลัง)
+                </button>
+              )}
             </div>
           )}
 
@@ -325,7 +410,11 @@ export const SheetsSyncModal: React.FC<SheetsSyncModalProps> = ({
               <input
                 type="url"
                 value={urlInput}
-                onChange={(e) => setUrlInput(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setUrlInput(val);
+                  saveDraftWebhookUrl(val);
+                }}
                 placeholder="https://script.google.com/macros/s/.../exec"
                 className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 focus:border-emerald-500 focus:outline-none text-xs text-white placeholder:text-slate-500 font-mono"
                 required
@@ -339,14 +428,15 @@ export const SheetsSyncModal: React.FC<SheetsSyncModalProps> = ({
                 <CheckCircle className="w-4 h-4" />
                 <span>
                   {isConnecting
-                    ? 'กำลังทดสอบการเชื่อมต่อและซิงค์...'
-                    : 'เชื่อมต่อและบันทึกถาวร (ไม่ต้องล็อกอิน)'}
+                    ? 'กำลังบันทึกและทดสอบการเชื่อมต่อ...'
+                    : 'บันทึก Google Sheet ถาวรและซ่อนทันที'}
                 </span>
               </button>
             </form>
           )}
 
-          {/* Collapsible 3-Step Setup Guide */}
+          {/* Collapsible 3-Step Setup Guide (hidden automatically after connected unless editing) */}
+          {(!isConnected || isEditingUrl) && (
           <div className="rounded-xl bg-slate-950/50 border border-slate-800 overflow-hidden">
             <button
               type="button"
@@ -402,6 +492,7 @@ export const SheetsSyncModal: React.FC<SheetsSyncModalProps> = ({
               </div>
             )}
           </div>
+          )}
 
           {/* Feature summary bullet list */}
           <div className="text-[10px] text-slate-400 space-y-0.5 bg-slate-950/40 p-2 rounded-xl border border-slate-800/80">

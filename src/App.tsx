@@ -25,6 +25,7 @@ import {
   getSavedSheetTitle,
   getSavedSheetUrl,
   getSheetsWebhookUrl,
+  loadSheetsConnectionPersistent,
   syncAllPointsToSheet,
   testSheetsConnection,
   updateMatchSummarySheet,
@@ -41,7 +42,7 @@ import { MatchSetupModal } from './components/MatchSetupModal';
 import { PostMatchModal } from './components/PostMatchModal';
 import { MatchHistoryModal } from './components/MatchHistoryModal';
 
-import { Smartphone, X, WifiOff } from 'lucide-react';
+import { Smartphone, X, WifiOff, CheckCircle } from 'lucide-react';
 
 export default function App() {
   // 1. Match State
@@ -115,23 +116,36 @@ export default function App() {
     offlineSync.getPendingCount()
   );
 
-  // 5. Orientation Detection
+  // 5. Orientation Detection & Toast
   const [isPortrait, setIsPortrait] = useState<boolean>(false);
   const [dismissPortraitWarning, setDismissPortraitWarning] = useState<boolean>(false);
+  const [sheetsToast, setSheetsToast] = useState<string | null>(null);
 
   // Initialize Always-On Google Sheets Sync & Network Listeners (No Login Required)
   useEffect(() => {
-    const initialWebhook = getSheetsWebhookUrl();
-    if (initialWebhook && navigator.onLine) {
-      testSheetsConnection(initialWebhook)
-        .then((info) => {
-          setWebhookUrl(info.webhookUrl);
-          if (info.spreadsheetUrl) setActiveSheetUrl(info.spreadsheetUrl);
-          if (info.title) setActiveSheetTitle(info.title);
-          return offlineSync.processQueue();
-        })
-        .catch((err) => console.warn('Background Google Sheets check:', err));
-    }
+    let cancelled = false;
+    loadSheetsConnectionPersistent()
+      .then((persisted) => {
+        if (cancelled || !persisted?.webhookUrl) return;
+        setWebhookUrl(persisted.webhookUrl);
+        if (persisted.spreadsheetUrl) setActiveSheetUrl(persisted.spreadsheetUrl);
+        if (persisted.title) setActiveSheetTitle(persisted.title);
+
+        if (navigator.onLine) {
+          testSheetsConnection(persisted.webhookUrl)
+            .then((info) => {
+              if (cancelled) return;
+              setWebhookUrl(info.webhookUrl);
+              if (info.spreadsheetUrl) setActiveSheetUrl(info.spreadsheetUrl);
+              if (info.title) setActiveSheetTitle(info.title);
+              return offlineSync.processQueue();
+            })
+            .catch((err) => console.warn('Background Google Sheets check:', err));
+        }
+      })
+      .catch(() => {
+        // ignore persistence lookup errors
+      });
 
     const handleOnline = () => {
       setIsOnline(true);
@@ -157,6 +171,7 @@ export default function App() {
     window.addEventListener('resize', checkOrientation);
 
     return () => {
+      cancelled = true;
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
       window.removeEventListener('resize', checkOrientation);
@@ -404,6 +419,14 @@ export default function App() {
         </div>
       )}
 
+      {/* Brief Auto-Dismiss Confirmation Toast after saving & hiding Google Sheet */}
+      {sheetsToast && (
+        <div className="fixed top-12 right-3 z-50 flex items-center gap-2 bg-emerald-600 text-white px-3 py-2 rounded-xl text-xs font-bold shadow-2xl border border-emerald-400 animate-in fade-in slide-in-from-top-2 duration-200">
+          <CheckCircle className="w-4 h-4 text-emerald-100 shrink-0" />
+          <span>{sheetsToast}</span>
+        </div>
+      )}
+
       {/* Detailed Point Breakdown Modal (Winner or Error) */}
       {detailModal.isOpen && (
         <DetailPointModal
@@ -487,6 +510,10 @@ export default function App() {
             setActiveSheetUrl(info.sheetUrl);
             setActiveSheetTitle(info.sheetTitle);
           }}
+          onSavedAndHidden={() => {
+            setSheetsToast('บันทึก Google Sheet ถาวรและซ่อนปุ่มแล้ว • ซิงค์อัตโนมัติตลอดเวลา');
+            window.setTimeout(() => setSheetsToast(null), 4000);
+          }}
           match={match}
           isOnline={isOnline}
           pendingSyncCount={pendingSyncCount}
@@ -499,6 +526,9 @@ export default function App() {
           isOpen={isSetupOpen}
           onClose={() => setIsSetupOpen(false)}
           onStartMatch={handleStartNewMatch}
+          isSheetConnected={Boolean(webhookUrl)}
+          activeSheetTitle={activeSheetTitle}
+          onOpenSheetsSync={() => setIsSheetsModalOpen(true)}
         />
       )}
 

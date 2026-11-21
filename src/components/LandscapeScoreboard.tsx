@@ -136,36 +136,26 @@ export const LandscapeScoreboard: React.FC<LandscapeScoreboardProps> = ({
           })}
         </div>
 
-        {/* Right: Actions, Sheets Sync, Infographic, Analytics, PWA, Reset, Settings */}
+        {/* Right: Actions, Sheets Sync (hidden once saved), Infographic, Analytics, PWA, Reset, Settings */}
         <div className="flex items-center gap-1.5">
-          {/* Sheets Live Sync Badge */}
-          <button
-            onClick={onOpenSheetsSync}
-            className={`flex items-center gap-1 px-2 py-1 rounded-lg border text-[11px] font-semibold transition ${
-              isSheetConnected
-                ? 'bg-emerald-950/60 border-emerald-700/60 text-emerald-300 hover:bg-emerald-900/60'
-                : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'
-            }`}
-            title={
-              isSheetConnected
-                ? 'Google Sheets เชื่อมต่อตลอดเวลา (ไม่ต้องล็อกอิน)'
-                : 'ตั้งค่าเชื่อมต่อ Google Sheets (ไม่ต้องล็อกอิน)'
-            }
-          >
-            <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
-            <span className="hidden md:inline">
-              {isSheetConnected ? 'Sheets LIVE' : 'เชื่อม Sheet'}
-            </span>
-            {pendingSyncCount > 0 ? (
-              <span className="w-4 h-4 rounded-full bg-amber-500 text-slate-950 text-[9px] font-bold flex items-center justify-center animate-pulse">
-                {pendingSyncCount}
-              </span>
-            ) : isSheetConnected && isOnline ? (
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            ) : (
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-            )}
-          </button>
+          {/* Sheets Setup Button (automatically hidden after saving Google Sheet) */}
+          {!isSheetConnected && (
+            <button
+              onClick={onOpenSheetsSync}
+              className="flex items-center gap-1 px-2 py-1 rounded-lg border text-[11px] font-semibold transition bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700"
+              title="ตั้งค่าเชื่อมต่อ Google Sheets ครั้งเดียว (ไม่ต้องล็อกอิน)"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="hidden md:inline">เชื่อม Sheet</span>
+              {pendingSyncCount > 0 ? (
+                <span className="w-4 h-4 rounded-full bg-amber-500 text-slate-950 text-[9px] font-bold flex items-center justify-center animate-pulse">
+                  {pendingSyncCount}
+                </span>
+              ) : (
+                <span className={`w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-amber-400' : 'bg-slate-500'}`} />
+              )}
+            </button>
+          )}
 
           {/* Infographic Button */}
           <button

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { AdRule, MatchFormat, MatchSettings, MatchType } from '../types/tennis';
-import { Users, User as UserIcon, Play, Settings2, X, Trash2, Plus, UserPlus, Smartphone } from 'lucide-react';
+import { Users, User as UserIcon, Play, Settings2, X, Trash2, Plus, UserPlus, Smartphone, FileSpreadsheet } from 'lucide-react';
 import { PWAInstallButton } from './PWAInstallButton';
 import {
   getSavedPlayerRoster,
@@ -21,12 +21,18 @@ interface MatchSetupModalProps {
     t2DoublesPartner?: string,
     initialServer?: 'team1' | 'team2'
   ) => void;
+  isSheetConnected?: boolean;
+  activeSheetTitle?: string | null;
+  onOpenSheetsSync?: () => void;
 }
 
 export const MatchSetupModal: React.FC<MatchSetupModalProps> = ({
   isOpen,
   onClose,
   onStartMatch,
+  isSheetConnected = false,
+  activeSheetTitle = null,
+  onOpenSheetsSync,
 }) => {
   const [matchType, setMatchType] = useState<MatchType>('singles');
   const [format, setFormat] = useState<MatchFormat>('3sets');
@@ -460,8 +466,38 @@ export const MatchSetupModal: React.FC<MatchSetupModalProps> = ({
           </button>
         </form>
 
-        {/* App Installation Section inside Settings */}
-        <div className="pt-3 border-t border-slate-800 space-y-2">
+        {/* App Installation & Hidden Google Sheets Access inside Settings */}
+        <div className="pt-3 border-t border-slate-800 space-y-2.5">
+          {onOpenSheetsSync && (
+            <div className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-slate-950/70 border border-slate-800">
+              <div className="flex items-center gap-2 min-w-0">
+                <FileSpreadsheet className="w-4 h-4 text-emerald-400 shrink-0" />
+                <div className="min-w-0">
+                  <div className="text-xs font-bold text-slate-200">
+                    Google Sheets {isSheetConnected ? '• บันทึกถาวรแล้ว' : ''}
+                  </div>
+                  <div className="text-[10px] text-slate-400 truncate">
+                    {isSheetConnected
+                      ? activeSheetTitle
+                        ? `${activeSheetTitle} (ซิงค์อัตโนมัติตลอดเวลา)`
+                        : 'ซ่อนปุ่มหน้าหลัก • ซิงค์อัตโนมัติตลอดเวลา'
+                      : 'ยังไม่ได้ตั้งค่าลิงก์ Google Sheet'}
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onOpenSheetsSync();
+                }}
+                className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-emerald-300 text-[11px] font-bold shrink-0 transition"
+              >
+                {isSheetConnected ? 'เปิดดู / แก้ไข' : 'ตั้งค่า'}
+              </button>
+            </div>
+          )}
+
           <div className="flex items-center gap-1.5 text-xs font-bold text-slate-300">
             <Smartphone className="w-4 h-4 text-emerald-400" />
             <span>ติดตั้งแอปลงบนมือถือ / แท็บเล็ต (PWA)</span>

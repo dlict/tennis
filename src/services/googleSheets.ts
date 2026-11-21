@@ -2,8 +2,14 @@ import { MatchState, PointRecord } from '../types/tennis';
 import { calculateMatchStats } from '../utils/tennisEngine';
 
 const WEBHOOK_URL_KEY = 'tennispro_sheets_webhook_url_v1';
+const DRAFT_WEBHOOK_URL_KEY = 'tennispro_sheets_draft_url_v1';
 const ACTIVE_SHEET_URL_KEY = 'tennispro_active_sheet_url';
 const ACTIVE_SHEET_TITLE_KEY = 'tennispro_active_sheet_title';
+const ACTIVE_SHEET_ID_KEY = 'tennispro_active_sheet_id';
+
+const IDB_NAME = 'tennispro_sheets_store_v1';
+const IDB_STORE = 'config';
+const IDB_KEY = 'active_connection';
 
 export interface SheetConnectionInfo {
   webhookUrl: string;
@@ -90,9 +96,129 @@ export function getSavedSheetTitle(): string | null {
   }
 }
 
+export function getDraftWebhookUrl(): string {
+  try {
+    return localStorage.getItem(DRAFT_WEBHOOK_URL_KEY) || '';
+  } catch {
+    return '';
+  }
+}
+
+export function saveDraftWebhookUrl(url: string): void {
+  try {
+    if (url.trim()) {
+      localStorage.setItem(DRAFT_WEBHOOK_URL_KEY, url);
+    } else {
+      localStorage.removeItem(DRAFT_WEBHOOK_URL_KEY);
+    }
+  } catch {
+    // ignore
+  }
+}
+
+function openSheetsDb(): Promise<IDBDatabase | null> {
+  if (typeof indexedDB === 'undefined') return Promise.resolve(null);
+  return new Promise((resolve) => {
+    try {
+      const req = indexedDB.open(IDB_NAME, 1);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains(IDB_STORE)) {
+          db.createObjectStore(IDB_STORE);
+        }
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => resolve(null);
+    } catch {
+      resolve(null);
+    }
+  });
+}
+
+async function writeConnectionToIdb(info: SheetConnectionInfo): Promise<void> {
+  const db = await openSheetsDb();
+  if (!db) return;
+  await new Promise<void>((resolve) => {
+    try {
+      const tx = db.transaction(IDB_STORE, 'readwrite');
+      tx.objectStore(IDB_STORE).put(info, IDB_KEY);
+      tx.oncomplete = () => {
+        db.close();
+        resolve();
+      };
+      tx.onerror = () => {
+        db.close();
+        resolve();
+      };
+    } catch {
+      db.close();
+      resolve();
+    }
+  });
+}
+
+async function readConnectionFromIdb(): Promise<SheetConnectionInfo | null> {
+  const db = await openSheetsDb();
+  if (!db) return null;
+  return await new Promise<SheetConnectionInfo | null>((resolve) => {
+    try {
+      const tx = db.transaction(IDB_STORE, 'readonly');
+      const req = tx.objectStore(IDB_STORE).get(IDB_KEY);
+      req.onsuccess = () => {
+        db.close();
+        const val = req.result as Partial<SheetConnectionInfo> | undefined;
+        if (val && typeof val.webhookUrl === 'string' && val.webhookUrl.trim()) {
+          resolve({
+            webhookUrl: val.webhookUrl.trim(),
+            spreadsheetId: val.spreadsheetId,
+            spreadsheetUrl: val.spreadsheetUrl,
+            title: val.title,
+          });
+        } else {
+          resolve(null);
+        }
+      };
+      req.onerror = () => {
+        db.close();
+        resolve(null);
+      };
+    } catch {
+      db.close();
+      resolve(null);
+    }
+  });
+}
+
+async function deleteConnectionFromIdb(): Promise<void> {
+  const db = await openSheetsDb();
+  if (!db) return;
+  await new Promise<void>((resolve) => {
+    try {
+      const tx = db.transaction(IDB_STORE, 'readwrite');
+      tx.objectStore(IDB_STORE).delete(IDB_KEY);
+      tx.oncomplete = () => {
+        db.close();
+        resolve();
+      };
+      tx.onerror = () => {
+        db.close();
+        resolve();
+      };
+    } catch {
+      db.close();
+      resolve();
+    }
+  });
+}
+
 export function saveSheetsConnection(info: SheetConnectionInfo): void {
   try {
-    localStorage.setItem(WEBHOOK_URL_KEY, info.webhookUrl.trim());
+    const cleanWebhook = info.webhookUrl.trim();
+    localStorage.setItem(WEBHOOK_URL_KEY, cleanWebhook);
+    localStorage.setItem(DRAFT_WEBHOOK_URL_KEY, cleanWebhook);
+    if (info.spreadsheetId) {
+      localStorage.setItem(ACTIVE_SHEET_ID_KEY, info.spreadsheetId);
+    }
     if (info.spreadsheetUrl) {
       localStorage.setItem(ACTIVE_SHEET_URL_KEY, info.spreadsheetUrl);
     }
@@ -104,14 +230,86 @@ export function saveSheetsConnection(info: SheetConnectionInfo): void {
   }
 }
 
+export async function saveSheetsConnectionPersistent(info: SheetConnectionInfo): Promise<void> {
+  const cleanInfo: SheetConnectionInfo = {
+    webhookUrl: info.webhookUrl.trim(),
+    spreadsheetId: info.spreadsheetId || localStorage.getItem(ACTIVE_SHEET_ID_KEY) || undefined,
+    spreadsheetUrl: info.spreadsheetUrl || getSavedSheetUrl() || undefined,
+    title: info.title || getSavedSheetTitle() || undefined,
+  };
+  saveSheetsConnection(cleanInfo);
+  await writeConnectionToIdb(cleanInfo);
+
+  // Best-effort sync to server file so it persists across browser contexts & reloads
+  try {
+    await fetch('/api/sheets-config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(cleanInfo),
+    });
+  } catch {
+    // Silent fallback — localStorage + IndexedDB already saved permanently
+  }
+}
+
+export async function loadSheetsConnectionPersistent(): Promise<SheetConnectionInfo | null> {
+  const localUrl = getSheetsWebhookUrl();
+  if (localUrl) {
+    const localInfo: SheetConnectionInfo = {
+      webhookUrl: localUrl,
+      spreadsheetId: localStorage.getItem(ACTIVE_SHEET_ID_KEY) || undefined,
+      spreadsheetUrl: getSavedSheetUrl() || undefined,
+      title: getSavedSheetTitle() || undefined,
+    };
+    void writeConnectionToIdb(localInfo);
+    return localInfo;
+  }
+
+  // Fallback 1: IndexedDB (survives across PWA/browser storage contexts better)
+  const idbInfo = await readConnectionFromIdb();
+  if (idbInfo?.webhookUrl) {
+    saveSheetsConnection(idbInfo);
+    return idbInfo;
+  }
+
+  // Fallback 2: Server-persisted .tennispro-sheets.json
+  try {
+    const res = await fetch('/api/sheets-config');
+    if (res.ok) {
+      const data = await res.json();
+      const serverCfg = data?.config as SheetConnectionInfo | null | undefined;
+      if (serverCfg?.webhookUrl) {
+        saveSheetsConnection(serverCfg);
+        await writeConnectionToIdb(serverCfg);
+        return serverCfg;
+      }
+    }
+  } catch {
+    // Ignore if edge proxy or offline blocks /api/sheets-config
+  }
+
+  return null;
+}
+
 export function clearSheetsConnection(): void {
   try {
     localStorage.removeItem(WEBHOOK_URL_KEY);
+    localStorage.removeItem(DRAFT_WEBHOOK_URL_KEY);
     localStorage.removeItem(ACTIVE_SHEET_URL_KEY);
     localStorage.removeItem(ACTIVE_SHEET_TITLE_KEY);
-    localStorage.removeItem('tennispro_active_sheet_id');
+    localStorage.removeItem(ACTIVE_SHEET_ID_KEY);
   } catch {
     // ignore
+  }
+}
+
+export async function clearSheetsConnectionPersistent(): Promise<void> {
+  clearSheetsConnection();
+  await deleteConnectionFromIdb();
+  try {
+    await fetch('/api/sheets-config', { method: 'DELETE' });
+  } catch {
+    // Ignore network/proxy issues
   }
 }
 
@@ -324,7 +522,7 @@ async function callAppsScriptDirect(
     spreadsheetUrl: data.spreadsheetUrl,
     title: data.title,
   };
-  saveSheetsConnection(info);
+  void saveSheetsConnectionPersistent(info);
   return info;
 }
 
@@ -365,7 +563,7 @@ async function callAppsScriptViaProxy(
       spreadsheetUrl: data.spreadsheetUrl,
       title: data.title,
     };
-    saveSheetsConnection(info);
+    void saveSheetsConnectionPersistent(info);
     return info;
   } catch (err: any) {
     // If proxy request itself failed at network layer, fall back to direct browser fetch
