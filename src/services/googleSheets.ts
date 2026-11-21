@@ -63,10 +63,82 @@ export const POINT_LOG_HEADERS: string[] = [
   'รหัสแมตช์ (Match ID)',
 ];
 
+let urlImportDetectedOnBoot = false;
+
+/**
+ * Checks URL query/hash (?sheet=... or #sheet=...) for an auto-connect Google Sheet link.
+ * Immediately validates, saves locally, and strips the parameter from the address bar.
+ */
+export function extractSheetsConfigFromCurrentUrl(): {
+  info: SheetConnectionInfo;
+  importedFromUrl: boolean;
+} | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const url = new URL(window.location.href);
+    let rawSheet = url.searchParams.get('sheet');
+    let rawTitle = url.searchParams.get('title');
+    let rawSurl = url.searchParams.get('surl');
+    let fromHash = false;
+
+    if (!rawSheet && url.hash && url.hash.includes('sheet=')) {
+      const hashParams = new URLSearchParams(url.hash.replace(/^#/, ''));
+      rawSheet = hashParams.get('sheet');
+      rawTitle = rawTitle || hashParams.get('title');
+      rawSurl = rawSurl || hashParams.get('surl');
+      fromHash = true;
+    }
+
+    if (!rawSheet) return null;
+    const validWebhook = validateWebhookUrl(rawSheet);
+    const info: SheetConnectionInfo = {
+      webhookUrl: validWebhook,
+      title: rawTitle?.trim() || undefined,
+      spreadsheetUrl: rawSurl?.trim() || undefined,
+    };
+    saveSheetsConnection(info);
+    urlImportDetectedOnBoot = true;
+
+    // Clean the URL bar without reloading
+    url.searchParams.delete('sheet');
+    url.searchParams.delete('title');
+    url.searchParams.delete('surl');
+    if (fromHash) {
+      url.hash = '';
+    }
+    window.history.replaceState({}, document.title, url.pathname + url.search + url.hash);
+
+    return { info, importedFromUrl: true };
+  } catch {
+    return null;
+  }
+}
+
+export function wasSheetsImportedFromUrl(): boolean {
+  return urlImportDetectedOnBoot;
+}
+
+export function buildAutoConnectShareUrl(info: {
+  webhookUrl: string;
+  title?: string | null;
+  sheetUrl?: string | null;
+}): string {
+  if (typeof window === 'undefined') return '';
+  const url = new URL(window.location.origin + window.location.pathname);
+  url.searchParams.set('sheet', info.webhookUrl.trim());
+  if (info.title) url.searchParams.set('title', info.title);
+  if (info.sheetUrl) url.searchParams.set('surl', info.sheetUrl);
+  return url.toString();
+}
+
 /**
  * Retrieves the permanently saved Google Apps Script Web App URL (no login required).
  */
 export function getSheetsWebhookUrl(): string | null {
+  const fromUrl = extractSheetsConfigFromCurrentUrl();
+  if (fromUrl?.info.webhookUrl) {
+    return fromUrl.info.webhookUrl;
+  }
   try {
     const saved = localStorage.getItem(WEBHOOK_URL_KEY);
     if (saved && saved.trim()) return saved.trim();
@@ -230,6 +302,18 @@ export function saveSheetsConnection(info: SheetConnectionInfo): void {
   }
 }
 
+async function syncConfigToServerBestEffort(info: SheetConnectionInfo): Promise<void> {
+  try {
+    await fetch('/api/sheets-config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(info),
+    });
+  } catch {
+    // Silent fallback — localStorage + IndexedDB already saved permanently
+  }
+}
+
 export async function saveSheetsConnectionPersistent(info: SheetConnectionInfo): Promise<void> {
   const cleanInfo: SheetConnectionInfo = {
     webhookUrl: info.webhookUrl.trim(),
@@ -239,20 +323,16 @@ export async function saveSheetsConnectionPersistent(info: SheetConnectionInfo):
   };
   saveSheetsConnection(cleanInfo);
   await writeConnectionToIdb(cleanInfo);
-
-  // Best-effort sync to server file so it persists across browser contexts & reloads
-  try {
-    await fetch('/api/sheets-config', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(cleanInfo),
-    });
-  } catch {
-    // Silent fallback — localStorage + IndexedDB already saved permanently
-  }
+  await syncConfigToServerBestEffort(cleanInfo);
 }
 
 export async function loadSheetsConnectionPersistent(): Promise<SheetConnectionInfo | null> {
+  const fromUrl = extractSheetsConfigFromCurrentUrl();
+  if (fromUrl?.info.webhookUrl) {
+    await saveSheetsConnectionPersistent(fromUrl.info);
+    return fromUrl.info;
+  }
+
   const localUrl = getSheetsWebhookUrl();
   if (localUrl) {
     const localInfo: SheetConnectionInfo = {
@@ -262,6 +342,8 @@ export async function loadSheetsConnectionPersistent(): Promise<SheetConnectionI
       title: getSavedSheetTitle() || undefined,
     };
     void writeConnectionToIdb(localInfo);
+    // Automatically backfill existing local config to server so other devices on the same URL get it too
+    void syncConfigToServerBestEffort(localInfo);
     return localInfo;
   }
 
@@ -269,12 +351,13 @@ export async function loadSheetsConnectionPersistent(): Promise<SheetConnectionI
   const idbInfo = await readConnectionFromIdb();
   if (idbInfo?.webhookUrl) {
     saveSheetsConnection(idbInfo);
+    void syncConfigToServerBestEffort(idbInfo);
     return idbInfo;
   }
 
-  // Fallback 2: Server-persisted .tennispro-sheets.json
+  // Fallback 2: Server-persisted .tennispro-sheets.json (no-store prevents stale null cache)
   try {
-    const res = await fetch('/api/sheets-config');
+    const res = await fetch('/api/sheets-config', { cache: 'no-store' });
     if (res.ok) {
       const data = await res.json();
       const serverCfg = data?.config as SheetConnectionInfo | null | undefined;

@@ -60,6 +60,7 @@ async function startServer() {
 
   // Persistent Google Sheets Web App configuration endpoints
   app.get('/api/sheets-config', async (_req: Request, res: Response) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
     const config = await readPersistedSheetsConfig();
     res.status(200).json({ ok: true, config });
   });

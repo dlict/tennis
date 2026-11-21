@@ -55,7 +55,7 @@ self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
   const url = new URL(event.request.url);
   if (url.origin !== self.location.origin) return;
-  if (url.pathname.startsWith('/@') || url.pathname.includes('node_modules')) return;
+  if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/@') || url.pathname.includes('node_modules')) return;
   event.respondWith(
     fetch(event.request)
       .then((res) => {
@@ -121,6 +121,7 @@ export default defineConfig(() => {
         manifest: pwaManifest,
         workbox: {
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
+          navigateFallbackDenylist: [/^\/api\//],
           maximumFileSizeToCacheInBytes: 5 * 1024 * 1024, // 5 MiB
         },
         devOptions: {

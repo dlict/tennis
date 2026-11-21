@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
+import QRCode from 'qrcode';
 import { MatchState } from '../types/tennis';
 import {
   APPS_SCRIPT_CODE,
+  buildAutoConnectShareUrl,
   clearSheetsConnectionPersistent,
   getDraftWebhookUrl,
   saveDraftWebhookUrl,
@@ -27,6 +29,8 @@ import {
   Unlink,
   ChevronDown,
   ChevronUp,
+  QrCode,
+  Share2,
 } from 'lucide-react';
 
 interface SheetsSyncModalProps {
@@ -67,7 +71,17 @@ export const SheetsSyncModal: React.FC<SheetsSyncModalProps> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [canForceSaveUrl, setCanForceSaveUrl] = useState(false);
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
+  const [copiedShareLink, setCopiedShareLink] = useState(false);
   const autoCloseTimerRef = useRef<number | null>(null);
+
+  const shareAutoConnectUrl = webhookUrl
+    ? buildAutoConnectShareUrl({
+        webhookUrl,
+        title: activeSheetTitle,
+        sheetUrl: activeSheetUrl,
+      })
+    : '';
 
   useEffect(() => {
     if (isOpen) {
@@ -77,6 +91,7 @@ export const SheetsSyncModal: React.FC<SheetsSyncModalProps> = ({
       setErrorMessage(null);
       setSuccessMessage(null);
       setCanForceSaveUrl(false);
+      setCopiedShareLink(false);
     }
     return () => {
       if (autoCloseTimerRef.current) {
@@ -85,6 +100,28 @@ export const SheetsSyncModal: React.FC<SheetsSyncModalProps> = ({
       }
     };
   }, [isOpen, webhookUrl]);
+
+  useEffect(() => {
+    let active = true;
+    if (!isOpen || !shareAutoConnectUrl) {
+      setQrDataUrl(null);
+      return;
+    }
+    QRCode.toDataURL(shareAutoConnectUrl, {
+      width: 160,
+      margin: 1,
+      color: { dark: '#0f172a', light: '#ffffff' },
+    })
+      .then((dataUrl) => {
+        if (active) setQrDataUrl(dataUrl);
+      })
+      .catch(() => {
+        if (active) setQrDataUrl(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [isOpen, shareAutoConnectUrl]);
 
   if (!isOpen) return null;
 
@@ -362,6 +399,55 @@ export const SheetsSyncModal: React.FC<SheetsSyncModalProps> = ({
                   <span>{isManualSyncing ? 'กำลังซิงค์ข้อมูล...' : 'ซิงค์ข้อมูลทั้งหมดเดี๋ยวนี้'}</span>
                 </button>
               </div>
+
+              {/* Cross-Device Instant Sync (QR Code & Share Link) */}
+              {shareAutoConnectUrl && (
+                <div className="p-2.5 rounded-xl bg-slate-950/80 border border-slate-800 space-y-2">
+                  <div className="flex items-center gap-1.5 text-[11px] font-bold text-amber-300">
+                    <QrCode className="w-3.5 h-3.5 shrink-0" />
+                    <span>ใช้กับเครื่องอื่นโดยไม่ต้องกรอกลิงก์ใหม่</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    {qrDataUrl && (
+                      <img
+                        src={qrDataUrl}
+                        alt="QR Code เชื่อมต่อ Google Sheet อัตโนมัติ"
+                        className="w-20 h-20 rounded-lg bg-white p-1 shrink-0 shadow"
+                      />
+                    )}
+                    <div className="flex-1 min-w-0 space-y-1.5">
+                      <p className="text-[10.5px] text-slate-300 leading-snug">
+                        สแกน QR Code ด้วยกล้องมือถืออีกเครื่อง หรือส่งลิงก์ด้านล่างไปเปิด เครื่องนั้นจะบันทึกชีตและซ่อนปุ่มให้อัตโนมัติทันที
+                      </p>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            await navigator.clipboard.writeText(shareAutoConnectUrl);
+                            setCopiedShareLink(true);
+                            setTimeout(() => setCopiedShareLink(false), 2500);
+                          } catch {
+                            setErrorMessage('ไม่สามารถคัดลอกลิงก์ได้อัตโนมัติ');
+                          }
+                        }}
+                        className="w-full py-1.5 px-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-emerald-300 text-[11px] font-bold flex items-center justify-center gap-1.5 transition"
+                      >
+                        {copiedShareLink ? (
+                          <>
+                            <Check className="w-3.5 h-3.5 text-emerald-400" />
+                            <span>คัดลอกลิงก์สำหรับเครื่องอื่นแล้ว!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Share2 className="w-3.5 h-3.5" />
+                            <span>คัดลอกลิงก์เปิดบนเครื่องอื่น</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div className="pt-1 flex items-center justify-between text-[10px]">
                 <button

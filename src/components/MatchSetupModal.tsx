@@ -493,7 +493,7 @@ export const MatchSetupModal: React.FC<MatchSetupModalProps> = ({
                 }}
                 className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-emerald-300 text-[11px] font-bold shrink-0 transition"
               >
-                {isSheetConnected ? 'เปิดดู / แก้ไข' : 'ตั้งค่า'}
+                {isSheetConnected ? 'ดู QR / จัดการ' : 'ตั้งค่า'}
               </button>
             </div>
           )}

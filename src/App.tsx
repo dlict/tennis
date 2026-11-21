@@ -29,6 +29,7 @@ import {
   syncAllPointsToSheet,
   testSheetsConnection,
   updateMatchSummarySheet,
+  wasSheetsImportedFromUrl,
 } from './services/googleSheets';
 import { sound } from './utils/soundEffects';
 
@@ -124,6 +125,10 @@ export default function App() {
   // Initialize Always-On Google Sheets Sync & Network Listeners (No Login Required)
   useEffect(() => {
     let cancelled = false;
+    if (wasSheetsImportedFromUrl()) {
+      setSheetsToast('เชื่อมต่อ Google Sheet ให้อัตโนมัติแล้ว • พร้อมซิงค์ตลอดเวลา');
+      window.setTimeout(() => setSheetsToast(null), 4000);
+    }
     loadSheetsConnectionPersistent()
       .then((persisted) => {
         if (cancelled || !persisted?.webhookUrl) return;
