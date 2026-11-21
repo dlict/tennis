@@ -1,4 +1,5 @@
 import {
+  AdRule,
   DoublesRotation,
   ErrorDetail,
   GameScore,
@@ -140,26 +141,38 @@ export function createInitialMatch(
   };
 }
 
+export function isDecidingPointState(currentGame: GameScore, adRule: AdRule): boolean {
+  if (currentGame.isTiebreak) return false;
+  if (adRule === 'no-ad') {
+    return currentGame.team1Points === 3 && currentGame.team2Points === 3;
+  }
+  if (adRule === '3-deuce') {
+    return currentGame.team1Points === 5 && currentGame.team2Points === 5;
+  }
+  return false;
+}
+
 /**
  * Determine display score for standard tennis game
  */
 export function formatStandardGameScore(
   t1Pts: number,
   t2Pts: number,
-  adRule: 'advantage' | 'no-ad'
-): { team1: StandardPoint; team2: StandardPoint; isDeuce: boolean } {
+  adRule: AdRule
+): { team1: StandardPoint; team2: StandardPoint; isDeuce: boolean; deuceCount: number } {
   if (t1Pts >= 3 && t2Pts >= 3) {
+    const deuceCount = t1Pts === t2Pts ? t1Pts - 2 : Math.min(t1Pts, t2Pts) - 2;
     if (t1Pts === t2Pts) {
-      return { team1: '40', team2: '40', isDeuce: true };
+      return { team1: '40', team2: '40', isDeuce: true, deuceCount };
     }
-    if (adRule === 'no-ad') {
-      // Sudden death at 40-40, next point wins directly
-      return { team1: '40', team2: '40', isDeuce: true };
+    if (adRule === 'no-ad' || (adRule === '3-deuce' && Math.min(t1Pts, t2Pts) >= 5)) {
+      // Sudden death at deciding point, next point wins directly
+      return { team1: '40', team2: '40', isDeuce: true, deuceCount };
     }
     if (t1Pts > t2Pts) {
-      return { team1: 'AD', team2: '40', isDeuce: false };
+      return { team1: 'AD', team2: '40', isDeuce: false, deuceCount };
     } else {
-      return { team1: '40', team2: 'AD', isDeuce: false };
+      return { team1: '40', team2: 'AD', isDeuce: false, deuceCount };
     }
   }
 
@@ -168,6 +181,7 @@ export function formatStandardGameScore(
     team1: pointMap[Math.min(t1Pts, 3)],
     team2: pointMap[Math.min(t2Pts, 3)],
     isDeuce: false,
+    deuceCount: 0,
   };
 }
 
@@ -175,6 +189,9 @@ export function formatStandardGameScore(
  * Determine if current point is on Deuce Court (Right) or Ad Court (Left)
  */
 export function getCurrentServeCourt(currentGame: GameScore): 'deuce' | 'ad' {
+  if (!currentGame.isTiebreak && currentGame.decidingServeCourt) {
+    return currentGame.decidingServeCourt;
+  }
   const totalPoints = currentGame.team1Points + currentGame.team2Points;
   // In standard game or tiebreak:
   // 0 pts = Deuce, 1 pt = Ad, 2 pts = Deuce, 3 pts = Ad...
@@ -310,6 +327,18 @@ export function getCurrentReceiver(state: MatchState): {
     };
   }
 
+  // Deciding point custom receiver override (No-Ad 40-40 or 3-Deuce 3rd Deuce)
+  if (!state.currentGame.isTiebreak && state.currentGame.decidingReceiverPlayerIndex !== undefined) {
+    const chosenIdx = state.currentGame.decidingReceiverPlayerIndex;
+    const player = state[receivingTeam].players[chosenIdx] || state[receivingTeam].players[0];
+    return {
+      team: receivingTeam,
+      playerIndex: chosenIdx,
+      playerId: player?.id || `${receivingTeam}_p${chosenIdx + 1}`,
+      playerName: player?.name || state[receivingTeam].name,
+    };
+  }
+
   // Doubles receiver position from doublesRotation if configured
   const rotation = state.doublesRotation;
   if (rotation && rotation.receivingPositions) {
@@ -351,7 +380,7 @@ export function getCurrentReceiver(state: MatchState): {
 export function getNextGameState(
   currentGame: GameScore,
   pointWinner: 'team1' | 'team2',
-  adRule: 'advantage' | 'no-ad'
+  adRule: AdRule
 ): {
   newGameScore: GameScore;
   gameWonBy: 'team1' | 'team2' | null;
@@ -398,6 +427,34 @@ export function getNextGameState(
           team1Display: fmt.team1,
           team2Display: fmt.team2,
           isDeuce: fmt.isDeuce,
+          deuceCount: fmt.deuceCount,
+          decidingServeCourt: undefined,
+          decidingReceiverPlayerIndex: undefined,
+        };
+      }
+    } else if (adRule === '3-deuce') {
+      if (
+        (newT1GamePts >= 4 && newT1GamePts - newT2GamePts >= 2) ||
+        (newT1GamePts >= 6 && newT1GamePts > newT2GamePts)
+      ) {
+        gameWonBy = 'team1';
+      } else if (
+        (newT2GamePts >= 4 && newT2GamePts - newT1GamePts >= 2) ||
+        (newT2GamePts >= 6 && newT2GamePts > newT1GamePts)
+      ) {
+        gameWonBy = 'team2';
+      } else {
+        const fmt = formatStandardGameScore(newT1GamePts, newT2GamePts, '3-deuce');
+        newGameScore = {
+          ...currentGame,
+          team1Points: newT1GamePts,
+          team2Points: newT2GamePts,
+          team1Display: fmt.team1,
+          team2Display: fmt.team2,
+          isDeuce: fmt.isDeuce,
+          deuceCount: fmt.deuceCount,
+          decidingServeCourt: undefined,
+          decidingReceiverPlayerIndex: undefined,
         };
       }
     } else {
@@ -414,6 +471,9 @@ export function getNextGameState(
           team1Display: fmt.team1,
           team2Display: fmt.team2,
           isDeuce: fmt.isDeuce,
+          deuceCount: fmt.deuceCount,
+          decidingServeCourt: undefined,
+          decidingReceiverPlayerIndex: undefined,
         };
       }
     }
@@ -558,25 +618,58 @@ export function detectPointContext(state: MatchState): PointContextResult {
   const server = currentServerTeam;
   const receiver: 'team1' | 'team2' = server === 'team1' ? 'team2' : 'team1';
 
-  // Handle No-Ad 40-40 Sudden death
-  const isNoAdDeciding =
-    settings.adRule === 'no-ad' &&
-    !currentGame.isTiebreak &&
-    currentGame.team1Points === 3 &&
-    currentGame.team2Points === 3;
+  const setsToWin = getSetsToWin(settings.format);
+  const gamesNeeded = settings.format === 'pro8' ? 8 : 6;
 
-  if (isNoAdDeciding) {
+  const checkSetMatchWin = (team: 'team1' | 'team2') => {
+    const potT1G = currentSet.team1Games + (team === 'team1' ? 1 : 0);
+    const potT2G = currentSet.team2Games + (team === 'team2' ? 1 : 0);
+    let wouldWinSet = false;
+    if (currentGame.isTiebreak) {
+      wouldWinSet = true;
+    } else if (team === 'team1') {
+      if (potT1G >= gamesNeeded && potT1G - potT2G >= 2) wouldWinSet = true;
+    } else {
+      if (potT2G >= gamesNeeded && potT2G - potT1G >= 2) wouldWinSet = true;
+    }
+
+    let wouldWinMatch = false;
+    if (wouldWinSet) {
+      let t1SetsWon = sets.filter((s, idx) => idx < currentSetIndex && s.winner === 'team1').length;
+      let t2SetsWon = sets.filter((s, idx) => idx < currentSetIndex && s.winner === 'team2').length;
+      if (team === 'team1') t1SetsWon += 1;
+      else t2SetsWon += 1;
+      if (t1SetsWon >= setsToWin || t2SetsWon >= setsToWin) wouldWinMatch = true;
+    }
+    return { wouldWinSet, wouldWinMatch };
+  };
+
+  // Handle Deciding Point (No-Ad at 40-40 OR 3-Deuce at 3rd Deuce 5-5)
+  const isDeciding = isDecidingPointState(currentGame, settings.adRule);
+  if (isDeciding) {
     const receiverName = receiver === 'team1' ? team1.name : team2.name;
     const serverName = server === 'team1' ? team1.name : team2.name;
+    const srvRes = checkSetMatchWin(server);
+    const rcvRes = checkSetMatchWin(receiver);
+    const isMatchPoint = srvRes.wouldWinMatch || rcvRes.wouldWinMatch;
+    const isSetPoint = !isMatchPoint && (srvRes.wouldWinSet || rcvRes.wouldWinSet);
+    const pointHolderName = rcvRes.wouldWinMatch || (!srvRes.wouldWinMatch && rcvRes.wouldWinSet)
+      ? receiverName
+      : srvRes.wouldWinMatch || srvRes.wouldWinSet
+      ? serverName
+      : receiverName;
+
+    const ruleLabel = settings.adRule === '3-deuce' ? 'ดิวซ์ 3/3 (ลูกสุดท้าย!)' : '40-40 (แต้มตัดสิน)';
+
     return {
       isBreakPoint: true,
       isGamePoint: true,
-      isSetPoint: false,
-      isMatchPoint: false,
+      isSetPoint,
+      isMatchPoint,
       isDecidingPoint: true,
       potentialWinnerTeam: receiver,
-      pointHolderName: receiverName,
-      badgeLabel: `🔥 DECIDING POINT (แต้มตัดสินเกม 40-40) - โอกาสเบรกของ ${receiverName}`,
+      pointHolderName,
+      badgeLabel: `🔥 DECIDING POINT ${ruleLabel}`,
       badgeType: 'deciding',
     };
   }
@@ -592,7 +685,7 @@ export function detectPointContext(state: MatchState): PointContextResult {
       potentialWinner = 'team2';
     }
   } else {
-    // Standard game with Ad
+    // Standard game with Ad or 3-Deuce before 3rd deuce
     if (currentGame.team1Points >= 3 && currentGame.team1Points - currentGame.team2Points >= 1) {
       potentialWinner = 'team1';
     } else if (currentGame.team2Points >= 3 && currentGame.team2Points - currentGame.team1Points >= 1) {
@@ -613,36 +706,7 @@ export function detectPointContext(state: MatchState): PointContextResult {
   const isBreakPoint = potentialWinner === receiver;
   const isGamePoint = potentialWinner === server;
 
-  // Check if winning this game would win the set
-  const setsToWin = getSetsToWin(settings.format);
-  const potentialTeam1Games = currentSet.team1Games + (potentialWinner === 'team1' ? 1 : 0);
-  const potentialTeam2Games = currentSet.team2Games + (potentialWinner === 'team2' ? 1 : 0);
-  const gamesNeeded = settings.format === 'pro8' ? 8 : 6;
-
-  let wouldWinSet = false;
-  if (currentGame.isTiebreak) {
-    wouldWinSet = true;
-  } else if (potentialWinner === 'team1') {
-    if (potentialTeam1Games >= gamesNeeded && potentialTeam1Games - potentialTeam2Games >= 2) {
-      wouldWinSet = true;
-    }
-  } else {
-    if (potentialTeam2Games >= gamesNeeded && potentialTeam2Games - potentialTeam1Games >= 2) {
-      wouldWinSet = true;
-    }
-  }
-
-  let wouldWinMatch = false;
-  if (wouldWinSet) {
-    let t1SetsWon = sets.filter((s, idx) => idx < currentSetIndex && s.winner === 'team1').length;
-    let t2SetsWon = sets.filter((s, idx) => idx < currentSetIndex && s.winner === 'team2').length;
-    if (potentialWinner === 'team1') t1SetsWon += 1;
-    else t2SetsWon += 1;
-
-    if (t1SetsWon >= setsToWin || t2SetsWon >= setsToWin) {
-      wouldWinMatch = true;
-    }
-  }
+  const { wouldWinSet, wouldWinMatch } = checkSetMatchWin(potentialWinner);
 
   const isMatchPoint = wouldWinMatch;
   const isSetPoint = wouldWinSet && !wouldWinMatch;
@@ -799,41 +863,10 @@ export function recordPoint(
       nextServerPlayerIndex = tbServerInfo.serverPlayerIndex;
     }
   } else {
-    // Standard game logic
-    if (state.settings.adRule === 'no-ad') {
-      if (newT1GamePts >= 4 && newT1GamePts > newT2GamePts) {
-        gameWonBy = 'team1';
-      } else if (newT2GamePts >= 4 && newT2GamePts > newT1GamePts) {
-        gameWonBy = 'team2';
-      } else {
-        const fmt = formatStandardGameScore(newT1GamePts, newT2GamePts, 'no-ad');
-        newGameScore = {
-          ...currentGame,
-          team1Points: newT1GamePts,
-          team2Points: newT2GamePts,
-          team1Display: fmt.team1,
-          team2Display: fmt.team2,
-          isDeuce: fmt.isDeuce,
-        };
-      }
-    } else {
-      // Advantage rule
-      if (newT1GamePts >= 4 && newT1GamePts - newT2GamePts >= 2) {
-        gameWonBy = 'team1';
-      } else if (newT2GamePts >= 4 && newT2GamePts - newT1GamePts >= 2) {
-        gameWonBy = 'team2';
-      } else {
-        const fmt = formatStandardGameScore(newT1GamePts, newT2GamePts, 'advantage');
-        newGameScore = {
-          ...currentGame,
-          team1Points: newT1GamePts,
-          team2Points: newT2GamePts,
-          team1Display: fmt.team1,
-          team2Display: fmt.team2,
-          isDeuce: fmt.isDeuce,
-        };
-      }
-    }
+    // Standard game logic (use shared getNextGameState supporting advantage, 3-deuce, no-ad)
+    const nextRes = getNextGameState(currentGame, pointWinner, state.settings.adRule);
+    gameWonBy = nextRes.gameWonBy;
+    newGameScore = nextRes.newGameScore;
   }
 
   // Update sets and games if game is won
@@ -1305,6 +1338,100 @@ export function updatePlayerNames(
       name: t2Name,
       players: updatedT2Players,
     },
+    updatedAt: Date.now(),
+  };
+}
+
+/**
+ * Choose who receives and/or which side receives the final serve on a Deciding Point (3-Deuce #3 or No-Ad 40-40)
+ */
+export function setDecidingReceiver(
+  state: MatchState,
+  options: { playerIndex?: number; serveCourt?: 'deuce' | 'ad' }
+): MatchState {
+  if (!isDecidingPointState(state.currentGame, state.settings.adRule)) {
+    return state;
+  }
+
+  const receivingTeam: 'team1' | 'team2' = state.currentServerTeam === 'team1' ? 'team2' : 'team1';
+  const isDoubles = state.settings.type === 'doubles' && state[receivingTeam].players.length > 1;
+
+  let nextServeCourt = options.serveCourt ?? state.currentGame.decidingServeCourt;
+  let nextPlayerIndex = options.playerIndex ?? state.currentGame.decidingReceiverPlayerIndex;
+
+  if (isDoubles) {
+    if (options.playerIndex !== undefined && options.serveCourt === undefined) {
+      // Match court side to the chosen player's receiving box
+      const chosenPlayer = state[receivingTeam].players[options.playerIndex];
+      const rot = state.doublesRotation?.receivingPositions;
+      if (rot && chosenPlayer) {
+        const deucePlayerId = receivingTeam === 'team1' ? rot.team1Deuce : rot.team2Deuce;
+        nextServeCourt = chosenPlayer.id === deucePlayerId ? 'deuce' : 'ad';
+      } else {
+        nextServeCourt = options.playerIndex === 0 ? 'deuce' : 'ad';
+      }
+    } else if (options.serveCourt !== undefined && options.playerIndex === undefined) {
+      // Keep current chosen player if already picked, else match default player for that court
+      if (nextPlayerIndex === undefined) {
+        const rot = state.doublesRotation?.receivingPositions;
+        if (rot) {
+          const targetId =
+            receivingTeam === 'team1'
+              ? options.serveCourt === 'deuce'
+                ? rot.team1Deuce
+                : rot.team1Ad
+              : options.serveCourt === 'deuce'
+              ? rot.team2Deuce
+              : rot.team2Ad;
+          const idx = state[receivingTeam].players.findIndex((p) => p.id === targetId);
+          nextPlayerIndex = idx >= 0 ? idx : options.serveCourt === 'deuce' ? 0 : 1;
+        } else {
+          nextPlayerIndex = options.serveCourt === 'deuce' ? 0 : 1;
+        }
+      }
+    }
+  } else {
+    nextPlayerIndex = 0;
+  }
+
+  return {
+    ...state,
+    currentGame: {
+      ...state.currentGame,
+      decidingServeCourt: nextServeCourt,
+      decidingReceiverPlayerIndex: nextPlayerIndex,
+    },
+    updatedAt: Date.now(),
+  };
+}
+
+/**
+ * Update match Deuce rule mid-match and refresh current game display
+ */
+export function updateMatchAdRule(state: MatchState, adRule: AdRule): MatchState {
+  if (state.settings.adRule === adRule) return state;
+
+  let updatedGame = { ...state.currentGame };
+  if (!updatedGame.isTiebreak) {
+    const fmt = formatStandardGameScore(updatedGame.team1Points, updatedGame.team2Points, adRule);
+    updatedGame = {
+      ...updatedGame,
+      team1Display: fmt.team1,
+      team2Display: fmt.team2,
+      isDeuce: fmt.isDeuce,
+      deuceCount: fmt.deuceCount,
+      decidingServeCourt: undefined,
+      decidingReceiverPlayerIndex: undefined,
+    };
+  }
+
+  return {
+    ...state,
+    settings: {
+      ...state.settings,
+      adRule,
+    },
+    currentGame: updatedGame,
     updatedAt: Date.now(),
   };
 }

@@ -106,7 +106,7 @@ export const SheetsSyncModal: React.FC<SheetsSyncModalProps> = ({
         `เชื่อมต่อกับ "${info.title || 'Google Sheet'}" สำเร็จ! ระบบจะซิงค์ตลอดเวลาโดยไม่ต้องล็อกอินอีก`
       );
     } catch (err: any) {
-      console.error(err);
+      console.warn('Sheets connection warning:', err);
       setErrorMessage(err.message || 'ไม่สามารถเชื่อมต่อ Google Sheet ได้');
     } finally {
       setIsConnecting(false);
@@ -131,7 +131,7 @@ export const SheetsSyncModal: React.FC<SheetsSyncModalProps> = ({
       });
       setSuccessMessage('ซิงค์ชื่อผู้เล่น สกอร์เซต แต้ม และสถิติทั้งหมดลง Google Sheet เรียบร้อยแล้ว!');
     } catch (err: any) {
-      console.error(err);
+      console.warn('Sheets sync warning:', err);
       setErrorMessage(err.message || 'เกิดข้อผิดพลาดในการซิงค์ข้อมูล');
     } finally {
       setIsManualSyncing(false);

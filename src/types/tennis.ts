@@ -8,6 +8,8 @@ export type MatchFormat = '1set' | '3sets' | '5sets' | 'pro8';
 
 export type TiebreakFormat = 'standard7' | 'super10';
 
+export type AdRule = 'advantage' | '3-deuce' | 'no-ad';
+
 export interface Player {
   id: string;
   name: string;
@@ -30,6 +32,9 @@ export interface GameScore {
   team1Display: StandardPoint | string; // e.g. "15", "40", "AD" or number in tiebreak
   team2Display: StandardPoint | string;
   isDeuce: boolean;
+  deuceCount?: number; // 1 = Deuce #1 (3-3), 2 = Deuce #2 (4-4), 3 = Deuce #3 (5-5)
+  decidingServeCourt?: 'deuce' | 'ad'; // Receiver-chosen box on deciding point (No-Ad 40-40 or 3-Deuce 3rd Deuce)
+  decidingReceiverPlayerIndex?: number; // Receiver-chosen player index on deciding point (doubles)
   isTiebreak: boolean;
   tiebreakPointsToWin: number;
   tiebreakInitialServerTeam?: 'team1' | 'team2';
@@ -206,7 +211,7 @@ export interface MatchSettings {
   type: MatchType;
   format: MatchFormat;
   tiebreakFormat: TiebreakFormat;
-  adRule: 'advantage' | 'no-ad';
+  adRule: AdRule;
   finalSetTiebreak: 'standard' | 'super';
   courtSurface: 'hard' | 'clay' | 'grass';
   tournamentName?: string;

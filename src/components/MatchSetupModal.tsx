@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { MatchFormat, MatchSettings, MatchType } from '../types/tennis';
+import { AdRule, MatchFormat, MatchSettings, MatchType } from '../types/tennis';
 import { Users, User as UserIcon, Play, Settings2, X, Trash2, Plus, UserPlus, Smartphone } from 'lucide-react';
 import { PWAInstallButton } from './PWAInstallButton';
 import {
@@ -30,7 +30,7 @@ export const MatchSetupModal: React.FC<MatchSetupModalProps> = ({
 }) => {
   const [matchType, setMatchType] = useState<MatchType>('singles');
   const [format, setFormat] = useState<MatchFormat>('3sets');
-  const [adRule, setAdRule] = useState<'advantage' | 'no-ad'>('advantage');
+  const [adRule, setAdRule] = useState<AdRule>('advantage');
   const [finalSetTiebreak, setFinalSetTiebreak] = useState<'standard' | 'super'>('standard');
   const [courtSurface, setCourtSurface] = useState<'hard' | 'clay' | 'grass'>('hard');
 
@@ -413,11 +413,12 @@ export const MatchSetupModal: React.FC<MatchSetupModalProps> = ({
               <label className="font-semibold text-slate-300 block mb-1">กฎดิวซ์ (Deuce):</label>
               <select
                 value={adRule}
-                onChange={(e) => setAdRule(e.target.value as 'advantage' | 'no-ad')}
+                onChange={(e) => setAdRule(e.target.value as AdRule)}
                 className="w-full px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-white focus:outline-hidden focus:border-emerald-500"
               >
-                <option value="advantage">Advantage (มีได้เปรียบ)</option>
-                <option value="no-ad">No-Ad (แต้มตัดสินทันที)</option>
+                <option value="advantage">Advantage (ดิวซ์ไม่จำกัด)</option>
+                <option value="3-deuce">ดิวซ์ 3 ลูก (แต้มตัดสินเลือกคนรับได้)</option>
+                <option value="no-ad">No-Ad (40-40 แต้มตัดสินทันที)</option>
               </select>
             </div>
 

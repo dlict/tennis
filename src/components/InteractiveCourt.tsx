@@ -1,11 +1,17 @@
 import React from 'react';
 import { MatchState } from '../types/tennis';
-import { getCurrentServeCourt, getCurrentServer, getCurrentReceiver } from '../utils/tennisEngine';
+import {
+  getCurrentServeCourt,
+  getCurrentServer,
+  getCurrentReceiver,
+  isDecidingPointState,
+} from '../utils/tennisEngine';
 
 interface InteractiveCourtProps {
   match: MatchState;
   onZoneSelect?: (zone: string) => void;
   selectedZone?: string | null;
+  onSelectDecidingCourt?: (court: 'deuce' | 'ad') => void;
 }
 
 interface PlayerPosition {
@@ -200,11 +206,13 @@ export const InteractiveCourt: React.FC<InteractiveCourtProps> = ({
   match,
   onZoneSelect,
   selectedZone,
+  onSelectDecidingCourt,
 }) => {
   const { currentGame, currentServerTeam, sets, currentSetIndex, settings } = match;
   const currentSet = sets[currentSetIndex];
   const serveCourt = getCurrentServeCourt(currentGame);
   const isDoubles = settings.type === 'doubles';
+  const isDecidingPoint = isDecidingPointState(currentGame, settings.adRule);
 
   const currentServer = getCurrentServer(match);
   const currentReceiver = getCurrentReceiver(match);
@@ -390,7 +398,7 @@ export const InteractiveCourt: React.FC<InteractiveCourtProps> = ({
   const isTiebreak = currentGame.isTiebreak;
   const tbPoints = currentGame.team1Points + currentGame.team2Points;
   const tbPtInPair = tbPoints === 0 ? 1 : (tbPoints + 1) % 2 === 1 ? 1 : 2;
-  const animKey = `${isServerOnLeft}-${serveCourt}-${tbPoints}-${currentSetIndex}`;
+  const animKey = `${isServerOnLeft}-${serveCourt}-${currentReceiver.playerId}-${tbPoints}-${currentSetIndex}`;
 
   // Court surface color palette (inner play area + outer apron)
   const surfacePalette =
@@ -487,7 +495,12 @@ export const InteractiveCourt: React.FC<InteractiveCourtProps> = ({
         {/* ================= INTERACTIVE SERVICE BOXES ================= */}
         {/* Box T1 Top (Left Ad Box) */}
         <div
-          onClick={() => onZoneSelect && onZoneSelect('t1_service_ad')}
+          onClick={() => {
+            if (isDecidingPoint && onSelectDecidingCourt && isServerOnLeft === false) {
+              onSelectDecidingCourt('ad');
+            }
+            if (onZoneSelect) onZoneSelect('t1_service_ad');
+          }}
           style={{
             backgroundColor:
               targetBox === 'box-t1-top'
@@ -503,7 +516,12 @@ export const InteractiveCourt: React.FC<InteractiveCourtProps> = ({
         />
         {/* Box T1 Bottom (Left Deuce Box) */}
         <div
-          onClick={() => onZoneSelect && onZoneSelect('t1_service_deuce')}
+          onClick={() => {
+            if (isDecidingPoint && onSelectDecidingCourt && isServerOnLeft === false) {
+              onSelectDecidingCourt('deuce');
+            }
+            if (onZoneSelect) onZoneSelect('t1_service_deuce');
+          }}
           style={{
             backgroundColor:
               targetBox === 'box-t1-bottom'
@@ -519,7 +537,12 @@ export const InteractiveCourt: React.FC<InteractiveCourtProps> = ({
         />
         {/* Box T2 Top (Right Deuce Box) */}
         <div
-          onClick={() => onZoneSelect && onZoneSelect('t2_service_deuce')}
+          onClick={() => {
+            if (isDecidingPoint && onSelectDecidingCourt && isServerOnLeft === true) {
+              onSelectDecidingCourt('deuce');
+            }
+            if (onZoneSelect) onZoneSelect('t2_service_deuce');
+          }}
           style={{
             backgroundColor:
               targetBox === 'box-t2-top'
@@ -535,7 +558,12 @@ export const InteractiveCourt: React.FC<InteractiveCourtProps> = ({
         />
         {/* Box T2 Bottom (Right Ad Box) */}
         <div
-          onClick={() => onZoneSelect && onZoneSelect('t2_service_ad')}
+          onClick={() => {
+            if (isDecidingPoint && onSelectDecidingCourt && isServerOnLeft === true) {
+              onSelectDecidingCourt('ad');
+            }
+            if (onZoneSelect) onZoneSelect('t2_service_ad');
+          }}
           style={{
             backgroundColor:
               targetBox === 'box-t2-bottom'

@@ -255,40 +255,67 @@ function buildOverviewAndStats(match: MatchState) {
   return { overviewRows, statsRows };
 }
 
-async function callAppsScriptViaProxy(
+async function callAppsScriptDirect(
   webhookUrl: string,
   method: 'GET' | 'POST',
   payload?: Record<string, any>
 ): Promise<SheetConnectionInfo> {
+  const separator = webhookUrl.includes('?') ? '&' : '?';
+  const targetUrl = method === 'GET' ? `${webhookUrl}${separator}action=ping&t=${Date.now()}` : webhookUrl;
+
   let res: Response;
   try {
-    res = await fetch('/api/sheets-proxy', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        webhookUrl,
-        method,
-        payload,
-      }),
+    res = await fetch(targetUrl, {
+      method,
+      redirect: 'follow',
+      credentials: 'omit',
+      headers:
+        method === 'POST'
+          ? { 'Content-Type': 'text/plain;charset=utf-8' }
+          : undefined,
+      body: method === 'POST' ? JSON.stringify(payload || {}) : undefined,
     });
-  } catch (networkErr: any) {
+  } catch {
     throw new Error(
-      `ไม่สามารถติดต่อเซิร์ฟเวอร์เชื่อมต่อ Google Sheet ได้ (${networkErr?.message || 'เครือข่ายขัดข้อง'})`
+      'ไม่สามารถเชื่อมต่อ Google Apps Script ได้ กรุณาตรวจสอบใน Apps Script ว่าตั้งค่า "ผู้ที่มีสิทธิ์เข้าถึง = ทุกคน (Anyone)" และใช้ลิงก์ที่ลงท้ายด้วย /exec แล้วครับ'
     );
   }
 
-  let data: any = null;
   const rawText = await res.text();
+  if (!res.ok) {
+    if (
+      res.status === 401 ||
+      res.status === 403 ||
+      rawText.includes('accounts.google.com') ||
+      rawText.includes('ServiceLogin')
+    ) {
+      throw new Error(
+        'Web App ยังตั้งค่าสิทธิ์ไม่เปิดสาธารณะ กรุณาตั้งค่า "ผู้ที่มีสิทธิ์เข้าถึง = ทุกคน (Anyone)" ใน Google Apps Script แล้ว Deploy ใหม่ครับ'
+      );
+    }
+    throw new Error(`ไม่สามารถเชื่อมต่อ Google Apps Script ได้ (HTTP ${res.status})`);
+  }
+
+  let data: any = null;
   try {
     data = JSON.parse(rawText);
   } catch {
-    throw new Error(`เซิร์ฟเวอร์ตอบกลับผิดรูปแบบ (${res.status})`);
+    if (
+      rawText.includes('accounts.google.com') ||
+      rawText.includes('ServiceLogin') ||
+      rawText.includes('Sign in')
+    ) {
+      throw new Error(
+        'ลิงก์ติดหน้าล็อกอิน Google กรุณาแก้ไขการ Deploy ใน Apps Script ให้ "ผู้ที่มีสิทธิ์เข้าถึง = ทุกคน (Anyone)" ครับ'
+      );
+    }
+    throw new Error(
+      'ไม่พบข้อมูล JSON จาก Apps Script กรุณาตรวจสอบว่าวางโค้ดครบและนำลิงก์ Web App (/exec) มาวางถูกต้อง'
+    );
   }
 
-  if (!res.ok || !data?.ok) {
-    throw new Error(data?.error || `การเชื่อมต่อ Google Sheet ล้มเหลว (${res.status})`);
+  if (!data?.ok) {
+    throw new Error(data?.error || 'Google Apps Script ตอบกลับข้อผิดพลาด');
   }
 
   const info: SheetConnectionInfo = {
@@ -299,6 +326,54 @@ async function callAppsScriptViaProxy(
   };
   saveSheetsConnection(info);
   return info;
+}
+
+async function callAppsScriptViaProxy(
+  webhookUrl: string,
+  method: 'GET' | 'POST',
+  payload?: Record<string, any>
+): Promise<SheetConnectionInfo> {
+  try {
+    const res = await fetch('/api/sheets-proxy', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        webhookUrl,
+        method,
+        payload,
+      }),
+    });
+
+    const rawText = await res.text();
+    let data: any = null;
+    try {
+      data = JSON.parse(rawText);
+    } catch {
+      // Edge proxy / static host returned non-JSON (e.g., 403/404/405) — fall back to direct fetch
+      return await callAppsScriptDirect(webhookUrl, method, payload);
+    }
+
+    if (!res.ok || !data?.ok) {
+      throw new Error(data?.error || `การเชื่อมต่อ Google Sheet ล้มเหลว (${res.status})`);
+    }
+
+    const info: SheetConnectionInfo = {
+      webhookUrl,
+      spreadsheetId: data.spreadsheetId,
+      spreadsheetUrl: data.spreadsheetUrl,
+      title: data.title,
+    };
+    saveSheetsConnection(info);
+    return info;
+  } catch (err: any) {
+    // If proxy request itself failed at network layer, fall back to direct browser fetch
+    if (err instanceof TypeError || (err?.message && err.message.includes('Failed to fetch'))) {
+      return await callAppsScriptDirect(webhookUrl, method, payload);
+    }
+    throw err;
+  }
 }
 
 async function postToAppsScript(webhookUrl: string, payload: Record<string, any>): Promise<SheetConnectionInfo> {

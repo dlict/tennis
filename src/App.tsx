@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
+  AdRule,
   MatchSettings,
   MatchState,
   ShotCategory,
@@ -13,7 +14,9 @@ import {
   registerFirstServeFault,
   registerSecondServeFault,
   resetServeFault,
+  setDecidingReceiver,
   setServerTeam,
+  updateMatchAdRule,
   updatePlayerNames,
 } from './utils/tennisEngine';
 import { isForbiddenName } from './utils/playerRoster';
@@ -167,7 +170,7 @@ export default function App() {
       sound.playFanfare();
       setIsPostMatchOpen(true);
       if (webhookUrl) {
-        updateMatchSummarySheet(webhookUrl, match).catch(console.error);
+        updateMatchSummarySheet(webhookUrl, match).catch((err) => console.warn('Sheets background sync:', err));
       }
     }
   }, [match.isFinished, webhookUrl, match]);
@@ -224,7 +227,7 @@ export default function App() {
     setMatch(previousMatch);
     offlineSync.saveMatchLocally(previousMatch);
     if (webhookUrl && navigator.onLine) {
-      syncAllPointsToSheet(webhookUrl, previousMatch).catch(console.error);
+      syncAllPointsToSheet(webhookUrl, previousMatch).catch((err) => console.warn('Sheets background sync:', err));
     }
   };
 
@@ -258,20 +261,34 @@ export default function App() {
     offlineSync.saveMatchLocally(updated);
   };
 
-  // Save Player Names & Server
+  // Select Deciding Point Receiver / Side (3-Deuce #3 or No-Ad 40-40)
+  const handleSelectDecidingReceiver = (options: {
+    playerIndex?: number;
+    serveCourt?: 'deuce' | 'ad';
+  }) => {
+    const updated = setDecidingReceiver(match, options);
+    setMatch(updated);
+    offlineSync.saveMatchLocally(updated);
+  };
+
+  // Save Player Names, Server & Deuce Rule
   const handleSavePlayers = (
     t1Name: string,
     t2Name: string,
     serverTeam: 'team1' | 'team2',
     t1Players?: string[],
-    t2Players?: string[]
+    t2Players?: string[],
+    adRule?: AdRule
   ) => {
     let updated = updatePlayerNames(match, t1Name, t2Name, t1Players, t2Players);
     updated = setServerTeam(updated, serverTeam);
+    if (adRule) {
+      updated = updateMatchAdRule(updated, adRule);
+    }
     setMatch(updated);
     offlineSync.saveMatchLocally(updated);
     if (webhookUrl) {
-      updateMatchSummarySheet(webhookUrl, updated).catch(console.error);
+      updateMatchSummarySheet(webhookUrl, updated).catch((err) => console.warn('Sheets background sync:', err));
     }
   };
 
@@ -294,7 +311,7 @@ export default function App() {
     offlineSync.saveMatchLocally(newMatch);
     setIsPostMatchOpen(false);
     if (webhookUrl) {
-      updateMatchSummarySheet(webhookUrl, newMatch).catch(console.error);
+      updateMatchSummarySheet(webhookUrl, newMatch).catch((err) => console.warn('Sheets background sync:', err));
     }
   };
 
@@ -307,7 +324,7 @@ export default function App() {
     offlineSync.saveMatchLocally(loadedMatch);
     setIsPostMatchOpen(false);
     if (webhookUrl) {
-      syncAllPointsToSheet(webhookUrl, loadedMatch).catch(console.error);
+      syncAllPointsToSheet(webhookUrl, loadedMatch).catch((err) => console.warn('Sheets background sync:', err));
     }
   };
 
@@ -327,7 +344,7 @@ export default function App() {
     offlineSync.saveMatchLocally(newMatch);
     setIsPostMatchOpen(false);
     if (webhookUrl) {
-      updateMatchSummarySheet(webhookUrl, newMatch).catch(console.error);
+      updateMatchSummarySheet(webhookUrl, newMatch).catch((err) => console.warn('Sheets background sync:', err));
     }
   };
 
@@ -361,6 +378,7 @@ export default function App() {
         onFirstServeFault={handleFirstServeFault}
         onSecondServeFault={handleSecondServeFault}
         onResetServeFault={handleResetServeFault}
+        onSelectDecidingReceiver={handleSelectDecidingReceiver}
         onOpenHistory={() => setIsHistoryOpen(true)}
         onOpenAnalytics={() => {
           setInspectedMatch(null);

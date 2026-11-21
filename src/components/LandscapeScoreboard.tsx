@@ -1,6 +1,11 @@
 import React, { useState } from 'react';
 import { MatchState, ShotCategory, StrokeType, ErrorDetail } from '../types/tennis';
-import { detectPointContext, getCurrentServer } from '../utils/tennisEngine';
+import {
+  detectPointContext,
+  getCurrentReceiver,
+  getCurrentServeCourt,
+  getCurrentServer,
+} from '../utils/tennisEngine';
 import { InteractiveCourt } from './InteractiveCourt';
 import {
   RotateCcw,
@@ -38,6 +43,7 @@ interface LandscapeScoreboardProps {
   onFirstServeFault: () => void;
   onSecondServeFault: () => void;
   onResetServeFault: () => void;
+  onSelectDecidingReceiver: (options: { playerIndex?: number; serveCourt?: 'deuce' | 'ad' }) => void;
   onOpenHistory: () => void;
   onOpenAnalytics: () => void;
   onOpenInfographic: () => void;
@@ -58,6 +64,7 @@ export const LandscapeScoreboard: React.FC<LandscapeScoreboardProps> = ({
   onFirstServeFault,
   onSecondServeFault,
   onResetServeFault,
+  onSelectDecidingReceiver,
   onOpenHistory,
   onOpenAnalytics,
   onOpenInfographic,
@@ -83,6 +90,12 @@ export const LandscapeScoreboard: React.FC<LandscapeScoreboardProps> = ({
 
   const currentServerInfo = getCurrentServer(match);
   const serverPlayerName = currentServerInfo.playerName;
+  const currentReceiverInfo = getCurrentReceiver(match);
+  const currentServeCourt = getCurrentServeCourt(currentGame);
+  const receivingTeamKey: 'team1' | 'team2' = currentServerTeam === 'team1' ? 'team2' : 'team1';
+  const receivingTeamPlayers = match[receivingTeamKey].players;
+  const isDoublesMatch = match.settings.type === 'doubles' && receivingTeamPlayers.length > 1;
+  const deuceCount = currentGame.deuceCount || 0;
 
   return (
     <div className="h-screen w-screen flex flex-col bg-slate-950 text-slate-100 overflow-hidden select-none">
@@ -285,16 +298,95 @@ export const LandscapeScoreboard: React.FC<LandscapeScoreboardProps> = ({
 
         {/* ================= CENTER: COURT & UNIFIED SCORING DOCK (Col 4-9, 50% width) ================= */}
         <div className="col-span-6 h-full flex flex-col justify-between rounded-2xl bg-slate-900/90 border border-slate-800 p-2 overflow-hidden shadow-xl gap-1.5">
-          {/* 1. ส่วนบน: ข้อความสถานะสำคัญของเกม */}
-          {(pointContext.badgeType === 'match' ||
+          {/* 1. ส่วนบน: ข้อความสถานะสำคัญของเกม & ตัวเลือกผู้รับลูกเสิร์ฟสุดท้าย */}
+          {(pointContext.isDecidingPoint ||
+            pointContext.badgeType === 'match' ||
             pointContext.badgeType === 'set' ||
             pointContext.badgeType === 'break' ||
             pointContext.badgeType === 'deciding' ||
+            (match.settings.adRule === '3-deuce' && deuceCount > 0) ||
             match.isFinished ||
             isFirstServeFault ||
             (currentGame.team1Points === 0 && currentGame.team2Points === 0 && totalGamesInSet > 0)) && (
-            <div className="shrink-0 h-9 sm:h-10 w-full flex items-center justify-center">
-              {pointContext.badgeType === 'match' ? (
+            <div className="shrink-0 min-h-9 sm:min-h-10 w-full flex items-center justify-center">
+              {pointContext.isDecidingPoint ? (
+                <div className="w-full py-1 px-2.5 rounded-xl bg-gradient-to-r from-amber-600 via-orange-600 to-amber-600 text-white flex flex-wrap items-center justify-between gap-1.5 shadow-lg border border-amber-300">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <Flame className="w-4 h-4 text-yellow-200 shrink-0 animate-pulse" />
+                    <div className="text-left min-w-0">
+                      <div className="text-[11px] sm:text-xs font-black tracking-wide flex items-center gap-1.5 flex-wrap">
+                        <span>
+                          {match.settings.adRule === '3-deuce'
+                            ? '🔥 ดิวซ์ 3/3 (ลูกสุดท้าย!)'
+                            : '🔥 40-40 แต้มตัดสิน'}
+                        </span>
+                        {pointContext.isMatchPoint && (
+                          <span className="bg-slate-950 text-amber-300 text-[9px] px-1.5 py-0.2 rounded font-black">
+                            MATCH PT
+                          </span>
+                        )}
+                        {pointContext.isSetPoint && !pointContext.isMatchPoint && (
+                          <span className="bg-slate-950 text-pink-300 text-[9px] px-1.5 py-0.2 rounded font-black">
+                            SET PT
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Selector: Choose who / which side receives the final deciding serve */}
+                  <div className="flex items-center gap-1 flex-wrap ml-auto">
+                    <span className="text-[9.5px] sm:text-[10px] font-bold text-amber-100 whitespace-nowrap">
+                      {isDoublesMatch ? 'ผู้รับลูกสุดท้าย:' : 'ฝั่งรับลูกสุดท้าย:'}
+                    </span>
+                    {isDoublesMatch ? (
+                      receivingTeamPlayers.map((p, idx) => {
+                        const isSelected = currentReceiverInfo.playerIndex === idx;
+                        return (
+                          <button
+                            key={p.id || idx}
+                            type="button"
+                            onClick={() => onSelectDecidingReceiver({ playerIndex: idx })}
+                            className={`px-2 py-0.5 rounded-lg text-[10px] sm:text-[11px] font-black border transition active:scale-95 ${
+                              isSelected
+                                ? 'bg-sky-500 text-white border-white shadow-md ring-1 ring-white/60'
+                                : 'bg-slate-950/75 text-amber-100 border-amber-300/50 hover:bg-slate-900'
+                            }`}
+                            title={`เลือกให้ ${p.name} เป็นคนรับลูกเสิร์ฟสุดท้าย`}
+                          >
+                            {p.name}
+                          </button>
+                        );
+                      })
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => onSelectDecidingReceiver({ serveCourt: 'deuce' })}
+                          className={`px-2 py-0.5 rounded-lg text-[10px] sm:text-[11px] font-black border transition active:scale-95 ${
+                            currentServeCourt === 'deuce'
+                              ? 'bg-sky-500 text-white border-white shadow-md ring-1 ring-white/60'
+                              : 'bg-slate-950/75 text-amber-100 border-amber-300/50 hover:bg-slate-900'
+                          }`}
+                        >
+                          ขวา (Deuce)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onSelectDecidingReceiver({ serveCourt: 'ad' })}
+                          className={`px-2 py-0.5 rounded-lg text-[10px] sm:text-[11px] font-black border transition active:scale-95 ${
+                            currentServeCourt === 'ad'
+                              ? 'bg-sky-500 text-white border-white shadow-md ring-1 ring-white/60'
+                              : 'bg-slate-950/75 text-amber-100 border-amber-300/50 hover:bg-slate-900'
+                          }`}
+                        >
+                          ซ้าย (Ad)
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              ) : pointContext.badgeType === 'match' ? (
                 <div className="w-full h-full py-1 px-3 rounded-xl bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 text-slate-950 flex items-center justify-between shadow-lg shadow-amber-500/30 border border-amber-300 animate-pulse">
                   <div className="flex items-center gap-2 min-w-0">
                     <Trophy className="w-4 h-4 text-slate-950 shrink-0" />
@@ -338,6 +430,9 @@ export const LandscapeScoreboard: React.FC<LandscapeScoreboardProps> = ({
                       </div>
                       <div className="text-[10px] font-medium text-rose-100 truncate">
                         {serverPlayerName} เสี่ยงโดนเบรก!
+                        {match.settings.adRule === '3-deuce' && deuceCount > 0
+                          ? ` • ดิวซ์ ${deuceCount}/3`
+                          : ''}
                       </div>
                     </div>
                   </div>
@@ -345,21 +440,23 @@ export const LandscapeScoreboard: React.FC<LandscapeScoreboardProps> = ({
                     จะโดนเบรค
                   </span>
                 </div>
-              ) : pointContext.badgeType === 'deciding' ? (
-                <div className="w-full h-full py-1 px-3 rounded-xl bg-gradient-to-r from-amber-600 via-orange-600 to-amber-600 text-white flex items-center justify-between shadow-lg border border-amber-300 animate-pulse">
+              ) : match.settings.adRule === '3-deuce' && deuceCount > 0 ? (
+                <div className="w-full h-full py-1 px-3 rounded-xl bg-gradient-to-r from-indigo-900/95 via-slate-800 to-indigo-900/95 border border-indigo-400/60 text-indigo-100 flex items-center justify-between shadow">
                   <div className="flex items-center gap-2 min-w-0">
-                    <Flame className="w-4 h-4 text-yellow-300 shrink-0" />
+                    <Flame className="w-4 h-4 text-amber-400 shrink-0" />
                     <div className="text-left min-w-0">
-                      <div className="text-xs font-black uppercase tracking-wider truncate">
-                        🔥 แต้มตัดสินเกม (Deciding Point)
+                      <div className="text-xs font-black text-white truncate">
+                        กติกา ดิวซ์ 3 ลูก • ดิวซ์ครั้งที่ {deuceCount} / 3
                       </div>
-                      <div className="text-[10px] font-medium text-amber-100 truncate">
-                        40-40 แต้มเดียวจบเกม!
+                      <div className="text-[10px] text-indigo-200 truncate">
+                        {deuceCount === 2
+                          ? 'หากกลับมา 40-40 อีกครั้ง จะเป็นแต้มตัดสินเกมทันที!'
+                          : 'เล่นได้เปรียบ (Ad) ตามปกติ'}
                       </div>
                     </div>
                   </div>
-                  <span className="text-[10px] bg-slate-950 text-amber-300 font-black px-2 py-0.5 rounded-md shrink-0 ml-1.5 shadow">
-                    แต้มตัดสิน
+                  <span className="text-[10px] bg-indigo-950 border border-indigo-400/50 text-amber-300 font-black px-2 py-0.5 rounded-md shrink-0 ml-1.5">
+                    ดิวซ์ {deuceCount}/3
                   </span>
                 </div>
               ) : match.isFinished ? (
@@ -422,7 +519,10 @@ export const LandscapeScoreboard: React.FC<LandscapeScoreboardProps> = ({
 
           {/* 2. ส่วนกลาง: คอร์ตเทนนิสแสดงนักกีฬาและวิถีลูกเทนนิสเต็มพื้นที่ */}
           <div className="flex-1 flex flex-col items-center justify-center min-h-0 w-full overflow-hidden">
-            <InteractiveCourt match={match} />
+            <InteractiveCourt
+              match={match}
+              onSelectDecidingCourt={(serveCourt) => onSelectDecidingReceiver({ serveCourt })}
+            />
           </div>
         </div>
 

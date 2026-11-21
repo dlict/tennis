@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { MatchState } from '../types/tennis';
+import { AdRule, MatchState } from '../types/tennis';
 import { X, Check, Edit3, Trash2, Plus, UserPlus } from 'lucide-react';
 import {
   getSavedPlayerRoster,
@@ -19,7 +19,8 @@ interface EditPlayerModalProps {
     t2Name: string,
     serverTeam: 'team1' | 'team2',
     t1Players?: string[],
-    t2Players?: string[]
+    t2Players?: string[],
+    adRule?: AdRule
   ) => void;
 }
 
@@ -43,6 +44,7 @@ export const EditPlayerModal: React.FC<EditPlayerModalProps> = ({
   const [t2P2, setT2P2] = useState(isForbiddenName(rawT2P2) ? '' : rawT2P2);
 
   const [serverTeam, setServerTeamState] = useState<'team1' | 'team2'>(match.currentServerTeam);
+  const [adRule, setAdRule] = useState<AdRule>(match.settings.adRule);
   const [savedRoster, setSavedRoster] = useState<string[]>(() => getSavedPlayerRoster());
   const [showRosterManager, setShowRosterManager] = useState<boolean>(false);
   const [newPlayerInput, setNewPlayerInput] = useState<string>('');
@@ -89,13 +91,13 @@ export const EditPlayerModal: React.FC<EditPlayerModalProps> = ({
         t2P1.trim() || undefined,
         t2P2.trim() || undefined,
       ]);
-      onSave(team1DisplayName, team2DisplayName, serverTeam, [p1, p2], [p3, p4]);
+      onSave(team1DisplayName, team2DisplayName, serverTeam, [p1, p2], [p3, p4], adRule);
     } else {
       const p1 = t1P1.trim() || 'ผู้เล่น 1';
       const p2 = t2P1.trim() || 'ผู้เล่น 2';
 
       saveMultiplePlayersToRoster([t1P1.trim() || undefined, t2P1.trim() || undefined]);
-      onSave(p1, p2, serverTeam, [p1], [p2]);
+      onSave(p1, p2, serverTeam, [p1], [p2], adRule);
     }
     onClose();
   };
@@ -390,13 +392,29 @@ export const EditPlayerModal: React.FC<EditPlayerModalProps> = ({
             </div>
           </div>
 
+          {/* Deuce Rule Selector */}
+          <div>
+            <label className="text-xs font-semibold text-emerald-300 block mb-1.5">
+              ⚖️ กฎดิวซ์ (Deuce Rule):
+            </label>
+            <select
+              value={adRule}
+              onChange={(e) => setAdRule(e.target.value as AdRule)}
+              className="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-xs text-white focus:outline-hidden focus:border-emerald-500"
+            >
+              <option value="advantage">Advantage (ดิวซ์ไม่จำกัด)</option>
+              <option value="3-deuce">ดิวซ์ 3 ลูก (3-Deuce • แต้มตัดสินเลือกคนรับได้)</option>
+              <option value="no-ad">No-Ad (40-40 แต้มตัดสินทันที)</option>
+            </select>
+          </div>
+
           {/* Save Button */}
           <button
             type="submit"
             className="w-full py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 font-bold text-white text-xs sm:text-sm shadow-lg flex items-center justify-center gap-2 active:scale-98 transition mt-2"
           >
             <Check className="w-4 h-4" />
-            <span>บันทึกรายชื่อและคนเสิร์ฟ</span>
+            <span>บันทึกรายชื่อและกติกา</span>
           </button>
         </form>
       </div>
