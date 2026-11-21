@@ -2,10 +2,6 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { MatchState } from '../types/tennis';
 import { offlineSync } from '../services/offlineSync';
 import {
-  getMatchHistoryFromFirestore,
-  deleteMatchFromFirestore,
-} from '../services/firestore';
-import {
   History,
   X,
   Trophy,
@@ -37,55 +33,12 @@ export const MatchHistoryModal: React.FC<MatchHistoryModalProps> = ({
   onLoadMatch,
 }) => {
   const [matches, setMatches] = useState<MatchState[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
   const [filterStatus, setFilterStatus] = useState<'all' | 'finished' | 'ongoing'>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     if (!isOpen) return;
-    let active = true;
-
-    const loadHistory = async () => {
-      setIsLoading(true);
-      const localList = offlineSync.getMatchHistory();
-      if (active) setMatches(localList);
-
-      try {
-        const cloudList = await getMatchHistoryFromFirestore(50);
-        if (!active) return;
-
-        // Merge local + cloud by match.id, keeping whichever is newer or has more points
-        const mergedMap = new Map<string, MatchState>();
-        for (const m of localList) {
-          if (m && m.id) mergedMap.set(m.id, m);
-        }
-        for (const cm of cloudList) {
-          if (!cm || !cm.id) continue;
-          const existing = mergedMap.get(cm.id);
-          if (
-            !existing ||
-            (cm.pointsHistory?.length || 0) > (existing.pointsHistory?.length || 0) ||
-            (cm.updatedAt || 0) > (existing.updatedAt || 0)
-          ) {
-            mergedMap.set(cm.id, cm);
-          }
-        }
-
-        const sorted = Array.from(mergedMap.values()).sort(
-          (a, b) => (b.updatedAt || b.createdAt) - (a.updatedAt || a.createdAt)
-        );
-        setMatches(sorted);
-      } catch {
-        // Offline or unauthenticated - keep local list silently
-      } finally {
-        if (active) setIsLoading(false);
-      }
-    };
-
-    loadHistory();
-    return () => {
-      active = false;
-    };
+    setMatches(offlineSync.getMatchHistory());
   }, [isOpen]);
 
   const filteredMatches = useMemo(() => {
@@ -109,10 +62,9 @@ export const MatchHistoryModal: React.FC<MatchHistoryModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleDelete = async (matchId: string) => {
+  const handleDelete = (matchId: string) => {
     offlineSync.deleteMatchFromHistory(matchId);
     setMatches((prev) => prev.filter((m) => m.id !== matchId));
-    await deleteMatchFromFirestore(matchId);
   };
 
   const formatSetScores = (m: MatchState) => {
@@ -198,11 +150,7 @@ export const MatchHistoryModal: React.FC<MatchHistoryModalProps> = ({
 
         {/* Match List */}
         <div className="flex-1 overflow-y-auto p-3 space-y-2.5">
-          {isLoading && matches.length === 0 ? (
-            <div className="text-center py-12 text-xs text-slate-400">
-              กำลังโหลดประวัติการแข่งขัน...
-            </div>
-          ) : filteredMatches.length === 0 ? (
+          {filteredMatches.length === 0 ? (
             <div className="text-center py-12 space-y-2">
               <div className="w-12 h-12 rounded-full bg-slate-800 flex items-center justify-center mx-auto text-slate-500">
                 <History className="w-6 h-6" />

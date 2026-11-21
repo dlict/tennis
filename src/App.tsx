@@ -1,10 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { User } from 'firebase/auth';
 import {
-  MatchFormat,
   MatchSettings,
   MatchState,
-  PointRecord,
   ShotCategory,
   StrokeType,
   ErrorDetail,
@@ -20,10 +17,15 @@ import {
   updatePlayerNames,
 } from './utils/tennisEngine';
 import { isForbiddenName } from './utils/playerRoster';
-import { initAuth } from './services/firebaseAuth';
 import { offlineSync } from './services/offlineSync';
-import { updateMatchSummarySheet } from './services/googleSheets';
-import { saveMatchToFirestore } from './services/firestore';
+import {
+  getSavedSheetTitle,
+  getSavedSheetUrl,
+  getSheetsWebhookUrl,
+  syncAllPointsToSheet,
+  testSheetsConnection,
+  updateMatchSummarySheet,
+} from './services/googleSheets';
 import { sound } from './utils/soundEffects';
 
 import { LandscapeScoreboard } from './components/LandscapeScoreboard';
@@ -97,14 +99,10 @@ export default function App() {
     team: 'team1',
   });
 
-  // 3. Google Auth & Sheets connection
-  const [user, setUser] = useState<User | null>(null);
-  const [activeSheetId, setActiveSheetId] = useState<string | null>(() => {
-    return localStorage.getItem('tennispro_active_sheet_id');
-  });
-  const [activeSheetUrl, setActiveSheetUrl] = useState<string | null>(() => {
-    return localStorage.getItem('tennispro_active_sheet_url');
-  });
+  // 3. Always-connected Google Sheets Webhook (No login required)
+  const [webhookUrl, setWebhookUrl] = useState<string | null>(() => getSheetsWebhookUrl());
+  const [activeSheetUrl, setActiveSheetUrl] = useState<string | null>(() => getSavedSheetUrl());
+  const [activeSheetTitle, setActiveSheetTitle] = useState<string | null>(() => getSavedSheetTitle());
 
   // 4. Online / Offline & Sync Queue
   const [isOnline, setIsOnline] = useState<boolean>(
@@ -118,12 +116,19 @@ export default function App() {
   const [isPortrait, setIsPortrait] = useState<boolean>(false);
   const [dismissPortraitWarning, setDismissPortraitWarning] = useState<boolean>(false);
 
-  // Initialize Auth & Network Listeners
+  // Initialize Always-On Google Sheets Sync & Network Listeners (No Login Required)
   useEffect(() => {
-    const unsubAuth = initAuth(
-      (currentUser) => setUser(currentUser),
-      () => setUser(null)
-    );
+    const initialWebhook = getSheetsWebhookUrl();
+    if (initialWebhook && navigator.onLine) {
+      testSheetsConnection(initialWebhook)
+        .then((info) => {
+          setWebhookUrl(info.webhookUrl);
+          if (info.spreadsheetUrl) setActiveSheetUrl(info.spreadsheetUrl);
+          if (info.title) setActiveSheetTitle(info.title);
+          return offlineSync.processQueue();
+        })
+        .catch((err) => console.warn('Background Google Sheets check:', err));
+    }
 
     const handleOnline = () => {
       setIsOnline(true);
@@ -149,7 +154,6 @@ export default function App() {
     window.addEventListener('resize', checkOrientation);
 
     return () => {
-      unsubAuth();
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
       window.removeEventListener('resize', checkOrientation);
@@ -162,11 +166,11 @@ export default function App() {
     if (match.isFinished) {
       sound.playFanfare();
       setIsPostMatchOpen(true);
-      if (activeSheetId) {
-        updateMatchSummarySheet(activeSheetId, match).catch(console.error);
+      if (webhookUrl) {
+        updateMatchSummarySheet(webhookUrl, match).catch(console.error);
       }
     }
-  }, [match.isFinished, activeSheetId, match]);
+  }, [match.isFinished, webhookUrl, match]);
 
   // Handle Point Awarding
   const handleAwardPoint = async (
@@ -201,15 +205,14 @@ export default function App() {
 
     setMatch(updatedMatch);
 
-    // Save locally & Firestore
+    // Save locally
     offlineSync.saveMatchLocally(updatedMatch);
-    saveMatchToFirestore(updatedMatch, user?.uid);
 
-    // Sync to Google Sheet if active
-    if (activeSheetId) {
+    // Sync to Google Sheet if connected (login-free)
+    if (webhookUrl) {
       const lastPoint = updatedMatch.pointsHistory[updatedMatch.pointsHistory.length - 1];
       if (lastPoint) {
-        offlineSync.queuePoint(activeSheetId, lastPoint, updatedMatch);
+        offlineSync.queuePoint(webhookUrl, lastPoint, updatedMatch);
       }
     }
   };
@@ -220,7 +223,9 @@ export default function App() {
     const previousMatch = undoLastPoint(match);
     setMatch(previousMatch);
     offlineSync.saveMatchLocally(previousMatch);
-    saveMatchToFirestore(previousMatch, user?.uid);
+    if (webhookUrl && navigator.onLine) {
+      syncAllPointsToSheet(webhookUrl, previousMatch).catch(console.error);
+    }
   };
 
   // 1st Serve Fault
@@ -229,7 +234,6 @@ export default function App() {
     const updated = registerFirstServeFault(match);
     setMatch(updated);
     offlineSync.saveMatchLocally(updated);
-    saveMatchToFirestore(updated, user?.uid);
   };
 
   // 2nd Serve Fault (Double Fault -> awards point to opponent!)
@@ -238,31 +242,20 @@ export default function App() {
     const updated = registerSecondServeFault(match);
     setMatch(updated);
     offlineSync.saveMatchLocally(updated);
-    saveMatchToFirestore(updated, user?.uid);
 
-    if (activeSheetId) {
+    if (webhookUrl) {
       const lastPoint = updated.pointsHistory[updated.pointsHistory.length - 1];
       if (lastPoint) {
-        offlineSync.queuePoint(activeSheetId, lastPoint, updated);
+        offlineSync.queuePoint(webhookUrl, lastPoint, updated);
       }
     }
   };
 
-  // Reset 1st Serve Fault (Let / Re-serve) - persists to LocalStorage and Firestore immediately!
+  // Reset 1st Serve Fault (Let / Re-serve) - persists to LocalStorage immediately!
   const handleResetServeFault = () => {
     const updated = resetServeFault(match);
     setMatch(updated);
     offlineSync.saveMatchLocally(updated);
-    saveMatchToFirestore(updated, user?.uid);
-  };
-
-  // Toggle Server
-  const handleToggleServer = () => {
-    const nextServer: 'team1' | 'team2' = match.currentServerTeam === 'team1' ? 'team2' : 'team1';
-    const updated = setServerTeam(match, nextServer);
-    setMatch(updated);
-    offlineSync.saveMatchLocally(updated);
-    saveMatchToFirestore(updated, user?.uid);
   };
 
   // Save Player Names & Server
@@ -277,9 +270,8 @@ export default function App() {
     updated = setServerTeam(updated, serverTeam);
     setMatch(updated);
     offlineSync.saveMatchLocally(updated);
-    saveMatchToFirestore(updated, user?.uid);
-    if (activeSheetId) {
-      updateMatchSummarySheet(activeSheetId, updated).catch(console.error);
+    if (webhookUrl) {
+      updateMatchSummarySheet(webhookUrl, updated).catch(console.error);
     }
   };
 
@@ -300,10 +292,9 @@ export default function App() {
     newMatch.currentServerTeam = initialServer;
     setMatch(newMatch);
     offlineSync.saveMatchLocally(newMatch);
-    saveMatchToFirestore(newMatch, user?.uid);
     setIsPostMatchOpen(false);
-    if (activeSheetId) {
-      updateMatchSummarySheet(activeSheetId, newMatch).catch(console.error);
+    if (webhookUrl) {
+      updateMatchSummarySheet(webhookUrl, newMatch).catch(console.error);
     }
   };
 
@@ -315,6 +306,9 @@ export default function App() {
     setMatch(loadedMatch);
     offlineSync.saveMatchLocally(loadedMatch);
     setIsPostMatchOpen(false);
+    if (webhookUrl) {
+      syncAllPointsToSheet(webhookUrl, loadedMatch).catch(console.error);
+    }
   };
 
   // Reset Match to 0-0 with Current Players & Rules
@@ -331,10 +325,9 @@ export default function App() {
     newMatch.currentServerTeam = match.currentServerTeam;
     setMatch(newMatch);
     offlineSync.saveMatchLocally(newMatch);
-    saveMatchToFirestore(newMatch, user?.uid);
     setIsPostMatchOpen(false);
-    if (activeSheetId) {
-      updateMatchSummarySheet(activeSheetId, newMatch).catch(console.error);
+    if (webhookUrl) {
+      updateMatchSummarySheet(webhookUrl, newMatch).catch(console.error);
     }
   };
 
@@ -381,7 +374,7 @@ export default function App() {
         onOpenSettings={() => setIsSetupOpen(true)}
         onResetMatch={handleResetCurrentMatch}
         isOnline={isOnline}
-        activeSheetUrl={activeSheetUrl}
+        isSheetConnected={Boolean(webhookUrl)}
         pendingSyncCount={pendingSyncCount}
       />
 
@@ -463,18 +456,18 @@ export default function App() {
         </div>
       )}
 
-      {/* Google Sheets Sync Modal */}
+      {/* Google Sheets Sync Modal (Always-On, No Login) */}
       {isSheetsModalOpen && (
         <SheetsSyncModal
           isOpen={isSheetsModalOpen}
           onClose={() => setIsSheetsModalOpen(false)}
-          user={user}
-          onUserChange={setUser}
+          webhookUrl={webhookUrl}
           activeSheetUrl={activeSheetUrl}
-          activeSheetId={activeSheetId}
-          onSheetCreated={(id, url) => {
-            setActiveSheetId(id);
-            setActiveSheetUrl(url);
+          activeSheetTitle={activeSheetTitle}
+          onConnectionUpdated={(info) => {
+            setWebhookUrl(info.webhookUrl);
+            setActiveSheetUrl(info.sheetUrl);
+            setActiveSheetTitle(info.sheetTitle);
           }}
           match={match}
           isOnline={isOnline}

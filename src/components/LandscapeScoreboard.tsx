@@ -45,7 +45,7 @@ interface LandscapeScoreboardProps {
   onOpenSettings: () => void;
   onResetMatch: () => void;
   isOnline: boolean;
-  activeSheetUrl: string | null;
+  isSheetConnected: boolean;
   pendingSyncCount: number;
 }
 
@@ -65,7 +65,7 @@ export const LandscapeScoreboard: React.FC<LandscapeScoreboardProps> = ({
   onOpenSettings,
   onResetMatch,
   isOnline,
-  activeSheetUrl,
+  isSheetConnected,
   pendingSyncCount,
 }) => {
   const [showResetConfirm, setShowResetConfirm] = useState(false);
@@ -129,20 +129,26 @@ export const LandscapeScoreboard: React.FC<LandscapeScoreboardProps> = ({
           <button
             onClick={onOpenSheetsSync}
             className={`flex items-center gap-1 px-2 py-1 rounded-lg border text-[11px] font-semibold transition ${
-              activeSheetUrl
+              isSheetConnected
                 ? 'bg-emerald-950/60 border-emerald-700/60 text-emerald-300 hover:bg-emerald-900/60'
                 : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'
             }`}
-            title="Google Sheets Live Sync"
+            title={
+              isSheetConnected
+                ? 'Google Sheets เชื่อมต่อตลอดเวลา (ไม่ต้องล็อกอิน)'
+                : 'ตั้งค่าเชื่อมต่อ Google Sheets (ไม่ต้องล็อกอิน)'
+            }
           >
             <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
-            <span className="hidden md:inline">Google Sheets</span>
+            <span className="hidden md:inline">
+              {isSheetConnected ? 'Sheets LIVE' : 'เชื่อม Sheet'}
+            </span>
             {pendingSyncCount > 0 ? (
               <span className="w-4 h-4 rounded-full bg-amber-500 text-slate-950 text-[9px] font-bold flex items-center justify-center animate-pulse">
                 {pendingSyncCount}
               </span>
-            ) : isOnline ? (
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+            ) : isSheetConnected && isOnline ? (
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
             ) : (
               <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
             )}

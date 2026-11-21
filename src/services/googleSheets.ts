@@ -1,10 +1,15 @@
 import { MatchState, PointRecord } from '../types/tennis';
 import { calculateMatchStats } from '../utils/tennisEngine';
-import { getAccessToken } from './firebaseAuth';
 
-export interface SheetCreationResult {
-  spreadsheetId: string;
-  spreadsheetUrl: string;
+const WEBHOOK_URL_KEY = 'tennispro_sheets_webhook_url_v1';
+const ACTIVE_SHEET_URL_KEY = 'tennispro_active_sheet_url';
+const ACTIVE_SHEET_TITLE_KEY = 'tennispro_active_sheet_title';
+
+export interface SheetConnectionInfo {
+  webhookUrl: string;
+  spreadsheetId?: string;
+  spreadsheetUrl?: string;
+  title?: string;
 }
 
 const CATEGORY_TRANSLATIONS: Record<string, string> = {
@@ -33,7 +38,110 @@ const ERROR_DETAIL_TRANSLATIONS: Record<string, string> = {
   foot_fault: 'ฟุตฟอลต์',
 };
 
-export function formatPointRow(point: PointRecord, match: MatchState): any[] {
+export const POINT_LOG_HEADERS: string[] = [
+  'แต้มที่',
+  'เวลา (Timestamp)',
+  'เซต (Set)',
+  'เกมที่ (Game)',
+  'ผู้เสิร์ฟ (Server)',
+  'คอร์ตเสิร์ฟ (Court)',
+  'เสิร์ฟ (Serve)',
+  'ผู้ได้แต้ม (Winner)',
+  'ประเภทช็อต (Category)',
+  'รายละเอียดการตี (Stroke)',
+  'ข้อผิดพลาด (Error Detail)',
+  'แต้มพิเศษ (Context)',
+  'คะแนนก่อนหน้า',
+  'คะแนนปัจจุบัน',
+  'รหัสแต้ม (Point ID)',
+  'รหัสแมตช์ (Match ID)',
+];
+
+/**
+ * Retrieves the permanently saved Google Apps Script Web App URL (no login required).
+ */
+export function getSheetsWebhookUrl(): string | null {
+  try {
+    const saved = localStorage.getItem(WEBHOOK_URL_KEY);
+    if (saved && saved.trim()) return saved.trim();
+  } catch {
+    // ignore storage read error
+  }
+  const envUrl = (import.meta as any).env?.VITE_GOOGLE_SHEETS_WEBHOOK_URL;
+  if (typeof envUrl === 'string' && envUrl.trim()) {
+    return envUrl.trim();
+  }
+  return null;
+}
+
+export function getSavedSheetUrl(): string | null {
+  try {
+    return localStorage.getItem(ACTIVE_SHEET_URL_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function getSavedSheetTitle(): string | null {
+  try {
+    return localStorage.getItem(ACTIVE_SHEET_TITLE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function saveSheetsConnection(info: SheetConnectionInfo): void {
+  try {
+    localStorage.setItem(WEBHOOK_URL_KEY, info.webhookUrl.trim());
+    if (info.spreadsheetUrl) {
+      localStorage.setItem(ACTIVE_SHEET_URL_KEY, info.spreadsheetUrl);
+    }
+    if (info.title) {
+      localStorage.setItem(ACTIVE_SHEET_TITLE_KEY, info.title);
+    }
+  } catch (e) {
+    console.warn('Failed to save Google Sheets connection info:', e);
+  }
+}
+
+export function clearSheetsConnection(): void {
+  try {
+    localStorage.removeItem(WEBHOOK_URL_KEY);
+    localStorage.removeItem(ACTIVE_SHEET_URL_KEY);
+    localStorage.removeItem(ACTIVE_SHEET_TITLE_KEY);
+    localStorage.removeItem('tennispro_active_sheet_id');
+  } catch {
+    // ignore
+  }
+}
+
+export function validateWebhookUrl(rawUrl: string): string {
+  const trimmed = rawUrl.trim();
+  if (!trimmed) {
+    throw new Error('กรุณาวางลิงก์ Google Apps Script Web App URL');
+  }
+  if (trimmed.includes('docs.google.com/spreadsheets')) {
+    throw new Error(
+      'ลิงก์นี้เป็นลิงก์ไฟล์ Google Sheet โดยตรง กรุณา Deploy Apps Script เป็น Web App แล้วนำลิงก์ที่ขึ้นต้นด้วย https://script.google.com/.../exec มาวางแทนครับ'
+    );
+  }
+  try {
+    const parsed = new URL(trimmed);
+    if (
+      parsed.protocol !== 'https:' ||
+      (parsed.hostname !== 'script.google.com' && parsed.hostname !== 'script.googleusercontent.com')
+    ) {
+      throw new Error('invalid host');
+    }
+  } catch {
+    throw new Error(
+      'รูปแบบลิงก์ไม่ถูกต้อง ต้องขึ้นต้นด้วย https://script.google.com/macros/s/.../exec'
+    );
+  }
+  return trimmed;
+}
+
+export function formatPointRow(point: PointRecord, match: MatchState): (string | number)[] {
   const winnerName = match[point.winnerTeam]?.name || point.winnerTeam;
   const serverName = match[point.servingTeam]?.name || point.servingTeam;
 
@@ -72,259 +180,12 @@ export function formatPointRow(point: PointRecord, match: MatchState): any[] {
     contextTag,
     `${point.scoreBefore.game.team1} - ${point.scoreBefore.game.team2}`,
     `${point.scoreAfter.game.team1} - ${point.scoreAfter.game.team2}`,
+    point.id,
+    match.id,
   ];
 }
 
-/**
- * Creates a brand new Tennis Match Google Spreadsheet
- */
-export async function createTennisMatchSheet(match: MatchState): Promise<SheetCreationResult> {
-  const token = await getAccessToken();
-  if (!token) throw new Error('ไม่พบ Token การเข้าถึง กรุณาลงชื่อเข้าใช้ Google ก่อน');
-
-  const title = `TennisPro - ${match.team1.name} vs ${match.team2.name} (${new Date().toLocaleDateString('th-TH')})`;
-
-  const payload = {
-    properties: {
-      title,
-      locale: 'th_TH',
-      timeZone: 'Asia/Bangkok',
-    },
-    sheets: [
-      {
-        properties: {
-          title: 'สรุปภาพรวมการแข่งขัน',
-          gridProperties: { rowCount: 40, columnCount: 12 },
-        },
-      },
-      {
-        properties: {
-          title: 'บันทึกแต้มเรียลไทม์',
-          gridProperties: { rowCount: 1000, columnCount: 16 },
-        },
-      },
-      {
-        properties: {
-          title: 'สถิติฟอร์มผู้เล่น',
-          gridProperties: { rowCount: 60, columnCount: 10 },
-        },
-      },
-    ],
-  };
-
-  const res = await fetch('https://sheets.googleapis.com/v4/spreadsheets', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(payload),
-  });
-
-  if (!res.ok) {
-    const errorBody = await res.text();
-    throw new Error(`ไม่สามารถสร้าง Google Sheet ได้: ${res.status} ${errorBody}`);
-  }
-
-  const data = await res.json();
-  const spreadsheetId = data.spreadsheetId;
-  const spreadsheetUrl = data.spreadsheetUrl;
-
-  // Initialize headers & overview
-  await initializeSheetHeaders(spreadsheetId, token, match);
-
-  // If match already has played points, sync all points immediately
-  if (match.pointsHistory && match.pointsHistory.length > 0) {
-    await syncAllPointsToSheet(spreadsheetId, match);
-  } else {
-    await updateMatchSummarySheet(spreadsheetId, match);
-  }
-
-  return { spreadsheetId, spreadsheetUrl };
-}
-
-async function initializeSheetHeaders(spreadsheetId: string, token: string, match: MatchState) {
-  // 1. Point log headers
-  const pointLogHeaders = [
-    [
-      'แต้มที่',
-      'เวลา (Timestamp)',
-      'เซต (Set)',
-      'เกมที่ (Game)',
-      'ผู้เสิร์ฟ (Server)',
-      'คอร์ตเสิร์ฟ (Court)',
-      'เสิร์ฟ 2 (2nd Serve)',
-      'ผู้ได้แต้ม (Winner)',
-      'ประเภทช็อต (Category)',
-      'รายละเอียดการตี (Stroke)',
-      'ข้อผิดพลาด (Error Detail)',
-      'แต้มพิเศษ (Context)',
-      'คะแนนก่อนหน้า',
-      'คะแนนปัจจุบัน',
-    ],
-  ];
-
-  // 2. Initial Match Overview
-  const isDoubles = match.settings.type === 'doubles';
-  const t1Players = match.team1.players?.map((p) => p.name).join(' & ') || match.team1.name;
-  const t2Players = match.team2.players?.map((p) => p.name).join(' & ') || match.team2.name;
-
-  const overviewData = [
-    ['🎾 TENNIS MATCH REPORT & LIVE SCOREBOARD'],
-    ['วันที่บันทึก:', new Date(match.createdAt).toLocaleString('th-TH')],
-    ['ประเภทการแข่ง:', isDoubles ? 'ประเภทคู่ (Doubles)' : 'ประเภทเดี่ยว (Singles)'],
-    ['รูปแบบแมตช์:', match.settings.format],
-    ['สนาม:', match.settings.courtSurface],
-    [],
-    ['ทีม / ผู้เล่น 1:', match.team1.name],
-    ['รายชื่อผู้เล่นทีม 1:', t1Players],
-    ['ทีม / ผู้เล่น 2:', match.team2.name],
-    ['รายชื่อผู้เล่นทีม 2:', t2Players],
-    [],
-    ['สถานะการแข่ง:', match.isFinished ? 'จบการแข่งขันแล้ว' : 'กำลังแข่งขัน (LIVE)'],
-    ['ผลการแข่งขัน:', match.matchWinner ? `ผู้ชนะ: ${match[match.matchWinner].name}` : '-'],
-  ];
-
-  // 3. Player Stats Headers
-  const statsHeaders = [
-    ['หมวดหมู่สถิติ (Statistic)', match.team1.name, match.team2.name],
-    ['แต้มรวมที่ได้ (Total Points Won)', '0', '0'],
-    ['เสิร์ฟแรกเข้า % (1st Serve %)', '0%', '0%'],
-    ['แต้มที่ได้จากเสิร์ฟแรก (1st Serve Won)', '0', '0'],
-    ['แต้มที่ได้จากเสิร์ฟสอง (2nd Serve Won)', '0', '0'],
-    ['เอซ (Aces)', '0', '0'],
-    ['ดับเบิ้ลฟอลต์ (Double Faults)', '0', '0'],
-    ['วินเนอร์รวม (Total Winners)', '0', '0'],
-    ['อันฟอร์ซเออเร่อร์ (Unforced Errors)', '0', '0'],
-    ['เบรกพอยต์สำเร็จ (Break Points Won)', '0/0', '0/0'],
-    ['การขึ้นหน้าเน็ตสำเร็จ (Net Points Won)', '0/0', '0/0'],
-  ];
-
-  // Batch update initial values
-  const batchData = [
-    {
-      range: 'บันทึกแต้มเรียลไทม์!A1:N1',
-      values: pointLogHeaders,
-    },
-    {
-      range: 'สรุปภาพรวมการแข่งขัน!A1:B13',
-      values: overviewData,
-    },
-    {
-      range: 'สถิติฟอร์มผู้เล่น!A1:C11',
-      values: statsHeaders,
-    },
-  ];
-
-  await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values:batchUpdate`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      valueInputOption: 'USER_ENTERED',
-      data: batchData,
-    }),
-  });
-}
-
-/**
- * Appends a single point record to Google Sheet in real-time
- */
-export async function appendPointToSheet(
-  spreadsheetId: string,
-  point: PointRecord,
-  match: MatchState
-): Promise<void> {
-  const token = await getAccessToken();
-  if (!token) return;
-
-  const row = formatPointRow(point, match);
-
-  const res = await fetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/บันทึกแต้มเรียลไทม์!A:N:append?valueInputOption=USER_ENTERED`,
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        values: [row],
-      }),
-    }
-  );
-
-  if (!res.ok) {
-    const errorText = await res.text();
-    throw new Error(`บันทึกแต้มลง Google Sheets ไม่สำเร็จ (${res.status}): ${errorText}`);
-  }
-}
-
-/**
- * Completely syncs ALL point records from match.pointsHistory into Google Sheets
- */
-export async function syncAllPointsToSheet(
-  spreadsheetId: string,
-  match: MatchState
-): Promise<void> {
-  const token = await getAccessToken();
-  if (!token) return;
-
-  const rows = match.pointsHistory.map((pt) => formatPointRow(pt, match));
-
-  // 1. Clear existing point rows (from row 2 down)
-  try {
-    await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/บันทึกแต้มเรียลไทม์!A2:N1000:clear`,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      }
-    );
-  } catch (e) {
-    console.warn('Could not clear old points:', e);
-  }
-
-  // 2. Write all point rows in one batch
-  if (rows.length > 0) {
-    const res = await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/บันทึกแต้มเรียลไทม์!A2:N${rows.length + 1}?valueInputOption=USER_ENTERED`,
-      {
-        method: 'PUT',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          values: rows,
-        }),
-      }
-    );
-    if (!res.ok) {
-      const err = await res.text();
-      throw new Error(`Sync all points failed (${res.status}): ${err}`);
-    }
-  }
-
-  // 3. Update summary and stats tabs
-  await updateMatchSummarySheet(spreadsheetId, match);
-}
-
-/**
- * Updates full statistics tab and overview in Google Sheet
- */
-export async function updateMatchSummarySheet(
-  spreadsheetId: string,
-  match: MatchState
-): Promise<void> {
-  const token = await getAccessToken();
-  if (!token) return;
-
+function buildOverviewAndStats(match: MatchState) {
   const stats = calculateMatchStats(match.pointsHistory, match.sets);
 
   const t1FirstInPct =
@@ -336,20 +197,12 @@ export async function updateMatchSummarySheet(
       ? Math.round((stats.team2.firstServesIn / stats.team2.firstServesAttempted) * 100) + '%'
       : '0%';
 
-  const statsValues = [
+  const statsRows = [
     ['หมวดหมู่สถิติ (Statistic)', match.team1.name, match.team2.name],
     ['แต้มรวมที่ได้ (Total Points Won)', stats.team1.totalPointsWon, stats.team2.totalPointsWon],
     ['เสิร์ฟแรกเข้า % (1st Serve %)', t1FirstInPct, t2FirstInPct],
-    [
-      'แต้มที่ได้จากเสิร์ฟแรก (1st Serve Won)',
-      stats.team1.firstServePointsWon,
-      stats.team2.firstServePointsWon,
-    ],
-    [
-      'แต้มที่ได้จากเสิร์ฟสอง (2nd Serve Won)',
-      stats.team1.secondServePointsWon,
-      stats.team2.secondServePointsWon,
-    ],
+    ['แต้มที่ได้จากเสิร์ฟแรก (1st Serve Won)', stats.team1.firstServePointsWon, stats.team2.firstServePointsWon],
+    ['แต้มที่ได้จากเสิร์ฟสอง (2nd Serve Won)', stats.team1.secondServePointsWon, stats.team2.secondServePointsWon],
     ['เอซ (Aces)', stats.team1.aces, stats.team2.aces],
     ['ดับเบิ้ลฟอลต์ (Double Faults)', stats.team1.doubleFaults, stats.team2.doubleFaults],
     ['วินเนอร์รวม (Total Winners)', stats.team1.winners, stats.team2.winners],
@@ -366,7 +219,6 @@ export async function updateMatchSummarySheet(
     ],
   ];
 
-  // Set scores summary string
   const scoreLine = match.sets
     .map((s, i) => {
       let str = `Set ${i + 1}: ${s.team1Games}-${s.team2Games}`;
@@ -381,7 +233,13 @@ export async function updateMatchSummarySheet(
   const t1Players = match.team1.players?.map((p) => p.name).join(' & ') || match.team1.name;
   const t2Players = match.team2.players?.map((p) => p.name).join(' & ') || match.team2.name;
 
-  const overviewUpdates = [
+  const overviewRows = [
+    ['🎾 TENNIS MATCH REPORT & LIVE SCOREBOARD', ''],
+    ['วันที่บันทึก:', new Date(match.createdAt).toLocaleString('th-TH')],
+    ['ประเภทการแข่ง:', isDoubles ? 'ประเภทคู่ (Doubles)' : 'ประเภทเดี่ยว (Singles)'],
+    ['รูปแบบแมตช์:', match.settings.format],
+    ['สนาม:', match.settings.courtSurface],
+    ['', ''],
     ['ทีม / ผู้เล่น 1:', match.team1.name],
     ['รายชื่อผู้เล่นทีม 1:', t1Players],
     ['ทีม / ผู้เล่น 2:', match.team2.name],
@@ -394,29 +252,219 @@ export async function updateMatchSummarySheet(
     ['อัปเดตล่าสุด:', new Date().toLocaleTimeString('th-TH')],
   ];
 
-  const updateRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values:batchUpdate`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      valueInputOption: 'USER_ENTERED',
-      data: [
-        {
-          range: 'สถิติฟอร์มผู้เล่น!A1:C11',
-          values: statsValues,
-        },
-        {
-          range: 'สรุปภาพรวมการแข่งขัน!A7:B16',
-          values: overviewUpdates,
-        },
-      ],
-    }),
-  });
+  return { overviewRows, statsRows };
+}
 
-  if (!updateRes.ok) {
-    const errorBody = await updateRes.text();
-    throw new Error(`อัปเดตหน้าสรุปสถิติ Google Sheet ล้มเหลว (${updateRes.status}): ${errorBody}`);
+async function callAppsScriptViaProxy(
+  webhookUrl: string,
+  method: 'GET' | 'POST',
+  payload?: Record<string, any>
+): Promise<SheetConnectionInfo> {
+  let res: Response;
+  try {
+    res = await fetch('/api/sheets-proxy', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        webhookUrl,
+        method,
+        payload,
+      }),
+    });
+  } catch (networkErr: any) {
+    throw new Error(
+      `ไม่สามารถติดต่อเซิร์ฟเวอร์เชื่อมต่อ Google Sheet ได้ (${networkErr?.message || 'เครือข่ายขัดข้อง'})`
+    );
+  }
+
+  let data: any = null;
+  const rawText = await res.text();
+  try {
+    data = JSON.parse(rawText);
+  } catch {
+    throw new Error(`เซิร์ฟเวอร์ตอบกลับผิดรูปแบบ (${res.status})`);
+  }
+
+  if (!res.ok || !data?.ok) {
+    throw new Error(data?.error || `การเชื่อมต่อ Google Sheet ล้มเหลว (${res.status})`);
+  }
+
+  const info: SheetConnectionInfo = {
+    webhookUrl,
+    spreadsheetId: data.spreadsheetId,
+    spreadsheetUrl: data.spreadsheetUrl,
+    title: data.title,
+  };
+  saveSheetsConnection(info);
+  return info;
+}
+
+async function postToAppsScript(webhookUrl: string, payload: Record<string, any>): Promise<SheetConnectionInfo> {
+  return callAppsScriptViaProxy(webhookUrl, 'POST', payload);
+}
+
+/**
+ * Tests connection to Google Apps Script Web App without any login and retrieves Sheet URL & title.
+ */
+export async function testSheetsConnection(rawUrl: string): Promise<SheetConnectionInfo> {
+  const webhookUrl = validateWebhookUrl(rawUrl);
+  return callAppsScriptViaProxy(webhookUrl, 'GET');
+}
+
+/**
+ * Appends a single point record and updates overview + stats tabs in one login-free request.
+ */
+export async function appendPointToSheet(
+  webhookUrl: string,
+  point: PointRecord,
+  match: MatchState
+): Promise<SheetConnectionInfo> {
+  const { overviewRows, statsRows } = buildOverviewAndStats(match);
+  return postToAppsScript(webhookUrl, {
+    action: 'append_point',
+    matchId: match.id,
+    pointId: point.id,
+    pointRow: formatPointRow(point, match),
+    pointLogHeaders: POINT_LOG_HEADERS,
+    overviewRows,
+    statsRows,
+  });
+}
+
+/**
+ * Syncs all points of the current match (idempotent per matchId) + updates overview & stats tabs.
+ */
+export async function syncAllPointsToSheet(
+  webhookUrl: string,
+  match: MatchState
+): Promise<SheetConnectionInfo> {
+  const { overviewRows, statsRows } = buildOverviewAndStats(match);
+  const pointRows = match.pointsHistory.map((pt) => formatPointRow(pt, match));
+  return postToAppsScript(webhookUrl, {
+    action: 'sync_all',
+    matchId: match.id,
+    pointRows,
+    pointLogHeaders: POINT_LOG_HEADERS,
+    overviewRows,
+    statsRows,
+  });
+}
+
+/**
+ * Updates full statistics tab and overview in Google Sheet without requiring login.
+ */
+export async function updateMatchSummarySheet(
+  webhookUrl: string,
+  match: MatchState
+): Promise<SheetConnectionInfo> {
+  const { overviewRows, statsRows } = buildOverviewAndStats(match);
+  return postToAppsScript(webhookUrl, {
+    action: 'update_summary',
+    matchId: match.id,
+    pointLogHeaders: POINT_LOG_HEADERS,
+    overviewRows,
+    statsRows,
+  });
+}
+
+export const APPS_SCRIPT_CODE = `// TennisPro Live Sync - Google Apps Script (ไม่ต้องล็อกอิน เชื่อมต่อตลอดเวลา)
+// วิธีใช้: วางโค้ดนี้ใน ส่วนขยาย > Apps Script > บันทึก > Deploy เป็น Web App (สิทธิ์: ทุกคน / Anyone)
+
+function doGet(e) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  return jsonOut({
+    ok: true,
+    title: ss.getName(),
+    spreadsheetId: ss.getId(),
+    spreadsheetUrl: ss.getUrl()
+  });
+}
+
+function doPost(e) {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(15000);
+  try {
+    var payload = JSON.parse(e.postData.contents || '{}');
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+
+    var overviewSheet = getOrCreateSheet(ss, 'สรุปภาพรวมการแข่งขัน');
+    var logSheet = getOrCreateSheet(ss, 'บันทึกแต้มเรียลไทม์');
+    var statsSheet = getOrCreateSheet(ss, 'สถิติฟอร์มผู้เล่น');
+
+    if (payload.pointLogHeaders && logSheet.getLastRow() === 0) {
+      logSheet.getRange(1, 1, 1, payload.pointLogHeaders.length).setValues([payload.pointLogHeaders]);
+      logSheet.setFrozenRows(1);
+    }
+
+    if (payload.action === 'append_point' && payload.pointRow) {
+      var isDuplicate = false;
+      var lastRow = logSheet.getLastRow();
+      if (lastRow > 1 && payload.pointId) {
+        var checkStart = Math.max(2, lastRow - 60);
+        var checkRows = logSheet.getRange(checkStart, 15, lastRow - checkStart + 1, 1).getValues();
+        for (var i = 0; i < checkRows.length; i++) {
+          if (String(checkRows[i][0]) === String(payload.pointId)) {
+            isDuplicate = true;
+            break;
+          }
+        }
+      }
+      if (!isDuplicate) {
+        logSheet.appendRow(payload.pointRow);
+      }
+    } else if (payload.action === 'sync_all') {
+      var existingLastRow = logSheet.getLastRow();
+      if (existingLastRow > 1 && payload.matchId) {
+        var allValues = logSheet.getRange(2, 1, existingLastRow - 1, 16).getValues();
+        var keptRows = [];
+        for (var r = 0; r < allValues.length; r++) {
+          if (String(allValues[r][15]) !== String(payload.matchId)) {
+            keptRows.push(allValues[r]);
+          }
+        }
+        logSheet.getRange(2, 1, existingLastRow - 1, 16).clearContent();
+        var merged = keptRows.concat(payload.pointRows || []);
+        if (merged.length > 0) {
+          logSheet.getRange(2, 1, merged.length, merged[0].length).setValues(merged);
+        }
+      } else if (payload.pointRows && payload.pointRows.length > 0) {
+        logSheet.getRange(2, 1, payload.pointRows.length, payload.pointRows[0].length).setValues(payload.pointRows);
+      }
+    }
+
+    if (payload.overviewRows && payload.overviewRows.length > 0) {
+      overviewSheet.getRange(1, 1, payload.overviewRows.length, 2).setValues(payload.overviewRows);
+    }
+
+    if (payload.statsRows && payload.statsRows.length > 0) {
+      statsSheet.getRange(1, 1, payload.statsRows.length, 3).setValues(payload.statsRows);
+    }
+
+    return jsonOut({
+      ok: true,
+      title: ss.getName(),
+      spreadsheetId: ss.getId(),
+      spreadsheetUrl: ss.getUrl()
+    });
+  } catch (err) {
+    return jsonOut({ ok: false, error: err && err.message ? err.message : String(err) });
+  } finally {
+    lock.releaseLock();
   }
 }
+
+function getOrCreateSheet(ss, name) {
+  var sheet = ss.getSheetByName(name);
+  if (!sheet) {
+    sheet = ss.insertSheet(name);
+  }
+  return sheet;
+}
+
+function jsonOut(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+`;

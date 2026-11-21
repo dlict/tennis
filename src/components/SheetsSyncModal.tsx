@@ -1,13 +1,12 @@
-import React, { useState } from 'react';
-import { User } from 'firebase/auth';
+import React, { useState, useEffect } from 'react';
 import { MatchState } from '../types/tennis';
 import {
-  createTennisMatchSheet,
+  APPS_SCRIPT_CODE,
+  clearSheetsConnection,
   syncAllPointsToSheet,
-  updateMatchSummarySheet,
+  testSheetsConnection,
 } from '../services/googleSheets';
 import { offlineSync } from '../services/offlineSync';
-import { googleSignIn, logout } from '../services/firebaseAuth';
 import {
   FileSpreadsheet,
   ExternalLink,
@@ -16,20 +15,27 @@ import {
   Wifi,
   WifiOff,
   X,
-  LogOut,
   AlertCircle,
   Check,
   Zap,
+  Copy,
+  Link2,
+  Unlink,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 
 interface SheetsSyncModalProps {
   isOpen: boolean;
   onClose: () => void;
-  user: User | null;
-  onUserChange: (user: User | null) => void;
+  webhookUrl: string | null;
   activeSheetUrl: string | null;
-  activeSheetId: string | null;
-  onSheetCreated: (id: string, url: string) => void;
+  activeSheetTitle: string | null;
+  onConnectionUpdated: (info: {
+    webhookUrl: string | null;
+    sheetUrl: string | null;
+    sheetTitle: string | null;
+  }) => void;
   match: MatchState;
   isOnline: boolean;
   pendingSyncCount: number;
@@ -38,84 +44,108 @@ interface SheetsSyncModalProps {
 export const SheetsSyncModal: React.FC<SheetsSyncModalProps> = ({
   isOpen,
   onClose,
-  user,
-  onUserChange,
+  webhookUrl,
   activeSheetUrl,
-  activeSheetId,
-  onSheetCreated,
+  activeSheetTitle,
+  onConnectionUpdated,
   match,
   isOnline,
   pendingSyncCount,
 }) => {
-  const [isLoading, setIsLoading] = useState(false);
+  const [urlInput, setUrlInput] = useState(webhookUrl || '');
+  const [isEditingUrl, setIsEditingUrl] = useState(!webhookUrl);
+  const [showGuide, setShowGuide] = useState(!webhookUrl);
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [isManualSyncing, setIsManualSyncing] = useState(false);
+  const [copiedScript, setCopiedScript] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [isManualSyncing, setIsManualSyncing] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      setUrlInput(webhookUrl || '');
+      setIsEditingUrl(!webhookUrl);
+      setShowGuide(!webhookUrl);
+      setErrorMessage(null);
+      setSuccessMessage(null);
+    }
+  }, [isOpen, webhookUrl]);
 
   if (!isOpen) return null;
 
-  const handleSignIn = async () => {
-    setIsLoading(true);
-    setErrorMessage(null);
-    setSuccessMessage(null);
+  const isConnected = Boolean(webhookUrl);
+
+  const handleCopyScript = async () => {
     try {
-      const result = await googleSignIn();
-      if (result) {
-        onUserChange(result.user);
-      }
-    } catch (err: any) {
-      console.error(err);
-      setErrorMessage(err.message || 'การเข้าสู่ระบบ Google ไม่สำเร็จ');
-    } finally {
-      setIsLoading(false);
+      await navigator.clipboard.writeText(APPS_SCRIPT_CODE);
+      setCopiedScript(true);
+      setTimeout(() => setCopiedScript(false), 2500);
+    } catch {
+      setErrorMessage('ไม่สามารถคัดลอกอัตโนมัติได้ กรุณาคัดลอกโค้ดในกล่องด้านล่างด้วยตนเอง');
     }
   };
 
-  const handleCreateSheet = async () => {
-    if (!user) {
-      setErrorMessage('กรุณาลงชื่อเข้าใช้ Google ก่อนสร้างชีต');
-      return;
-    }
-    setIsLoading(true);
+  const handleConnectAndSync = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setIsConnecting(true);
     setErrorMessage(null);
     setSuccessMessage(null);
+
     try {
-      const res = await createTennisMatchSheet(match);
-      onSheetCreated(res.spreadsheetId, res.spreadsheetUrl);
-      localStorage.setItem('tennispro_active_sheet_id', res.spreadsheetId);
-      localStorage.setItem('tennispro_active_sheet_url', res.spreadsheetUrl);
-      setSuccessMessage('สร้าง Google Sheet และบันทึกข้อมูลแมตช์สำเร็จแล้ว!');
+      const info = await testSheetsConnection(urlInput);
+      // Immediately initialize/sync current match into the connected Google Sheet
+      await syncAllPointsToSheet(info.webhookUrl, match);
+      onConnectionUpdated({
+        webhookUrl: info.webhookUrl,
+        sheetUrl: info.spreadsheetUrl || null,
+        sheetTitle: info.title || null,
+      });
+      setIsEditingUrl(false);
+      setShowGuide(false);
+      setSuccessMessage(
+        `เชื่อมต่อกับ "${info.title || 'Google Sheet'}" สำเร็จ! ระบบจะซิงค์ตลอดเวลาโดยไม่ต้องล็อกอินอีก`
+      );
     } catch (err: any) {
       console.error(err);
-      setErrorMessage(err.message || 'ไม่สามารถสร้าง Google Sheet ได้');
+      setErrorMessage(err.message || 'ไม่สามารถเชื่อมต่อ Google Sheet ได้');
     } finally {
-      setIsLoading(false);
+      setIsConnecting(false);
     }
   };
 
   const handleSyncAllNow = async () => {
-    if (!activeSheetId) {
-      setErrorMessage('ยังไม่มี Google Sheet ที่เชื่อมต่ออยู่');
+    if (!webhookUrl) {
+      setErrorMessage('กรุณาวางลิงก์ Google Apps Script Web App ก่อน');
       return;
     }
     setIsManualSyncing(true);
     setErrorMessage(null);
     setSuccessMessage(null);
     try {
-      await syncAllPointsToSheet(activeSheetId, match);
+      const info = await syncAllPointsToSheet(webhookUrl, match);
       await offlineSync.processQueue();
+      onConnectionUpdated({
+        webhookUrl: info.webhookUrl,
+        sheetUrl: info.spreadsheetUrl || activeSheetUrl,
+        sheetTitle: info.title || activeSheetTitle,
+      });
       setSuccessMessage('ซิงค์ชื่อผู้เล่น สกอร์เซต แต้ม และสถิติทั้งหมดลง Google Sheet เรียบร้อยแล้ว!');
-    } catch (e: any) {
-      console.error(e);
-      setErrorMessage(e.message || 'เกิดข้อผิดพลาดในการซิงค์ข้อมูล');
+    } catch (err: any) {
+      console.error(err);
+      setErrorMessage(err.message || 'เกิดข้อผิดพลาดในการซิงค์ข้อมูล');
     } finally {
       setIsManualSyncing(false);
     }
   };
 
-  const handleSignOut = async () => {
-    await logout();
-    onUserChange(null);
+  const handleDisconnect = () => {
+    clearSheetsConnection();
+    onConnectionUpdated({ webhookUrl: null, sheetUrl: null, sheetTitle: null });
+    setUrlInput('');
+    setIsEditingUrl(true);
+    setShowGuide(true);
+    setSuccessMessage(null);
+    setErrorMessage(null);
   };
 
   return (
@@ -126,15 +156,19 @@ export const SheetsSyncModal: React.FC<SheetsSyncModalProps> = ({
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-xs p-2 sm:p-4 overflow-y-auto animate-in fade-in duration-200"
     >
       <div className="w-full max-w-lg max-h-[92vh] bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl text-slate-100 flex flex-col overflow-hidden">
-        {/* Sticky Modal Header - Always Visible */}
+        {/* Sticky Modal Header */}
         <div className="flex items-center justify-between px-4 py-2.5 bg-slate-900 border-b border-slate-800 shrink-0">
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
               <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-white leading-tight">Google Sheets Sync</h3>
-              <p className="text-[10px] text-slate-400 leading-tight">บันทึกชื่อ ผล และแต้มสดลง Google Sheets</p>
+              <h3 className="text-sm font-bold text-white leading-tight">
+                Google Sheets Live Sync (ไม่ต้องล็อกอิน)
+              </h3>
+              <p className="text-[10px] text-slate-400 leading-tight">
+                เชื่อมต่อตลอดเวลา บันทึกชื่อ สกอร์ และแต้มสดอัตโนมัติ
+              </p>
             </div>
           </div>
           <button
@@ -149,18 +183,20 @@ export const SheetsSyncModal: React.FC<SheetsSyncModalProps> = ({
 
         {/* Scrollable Content Body */}
         <div className="flex-1 overflow-y-auto p-3.5 space-y-2.5 text-xs">
-          {/* Online / Offline status badge */}
+          {/* Online / Connection Status Bar */}
           <div className="flex items-center justify-between p-2 rounded-xl bg-slate-950/70 border border-slate-800">
             <div className="flex items-center gap-1.5">
               {isOnline ? (
                 <span className="flex items-center gap-1 text-[11px] font-semibold text-emerald-400">
                   <Wifi className="w-3.5 h-3.5" />
-                  <span>ออนไลน์ (พร้อมซิงค์)</span>
+                  <span>
+                    {isConnected ? 'ออนไลน์ • เชื่อมต่อตลอดเวลา' : 'ออนไลน์ • รอใส่ลิงก์ชีต'}
+                  </span>
                 </span>
               ) : (
                 <span className="flex items-center gap-1 text-[11px] font-semibold text-amber-400">
                   <WifiOff className="w-3.5 h-3.5" />
-                  <span>ออฟไลน์ (เก็บในเครื่อง)</span>
+                  <span>ออฟไลน์ (เก็บในเครื่อง &amp; ซิงค์เมื่อต่อเน็ต)</span>
                 </span>
               )}
             </div>
@@ -169,7 +205,7 @@ export const SheetsSyncModal: React.FC<SheetsSyncModalProps> = ({
               <span className="text-[10px] text-slate-400">
                 แต้มรอซิงค์: <strong className="text-white">{pendingSyncCount}</strong>
               </span>
-              {pendingSyncCount > 0 && isOnline && (
+              {pendingSyncCount > 0 && isOnline && isConnected && (
                 <button
                   onClick={handleSyncAllNow}
                   disabled={isManualSyncing}
@@ -184,156 +220,188 @@ export const SheetsSyncModal: React.FC<SheetsSyncModalProps> = ({
 
           {/* Feedback messages */}
           {errorMessage && (
-            <div className="p-2.5 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-[11px] flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 shrink-0" />
-              <span>{errorMessage}</span>
+            <div className="p-2.5 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-[11px] flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <span className="leading-relaxed">{errorMessage}</span>
             </div>
           )}
 
           {successMessage && (
-            <div className="p-2.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-[11px] flex items-center gap-2">
-              <Check className="w-4 h-4 shrink-0" />
-              <span>{successMessage}</span>
+            <div className="p-2.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-[11px] flex items-start gap-2">
+              <Check className="w-4 h-4 shrink-0 mt-0.5" />
+              <span className="leading-relaxed">{successMessage}</span>
             </div>
           )}
 
-          {/* Auth Section */}
-          {!user ? (
-            <div className="p-3 rounded-xl bg-slate-950/50 border border-slate-800 flex flex-col items-center text-center gap-2.5">
-              <p className="text-[11px] text-slate-300">
-                เข้าสู่ระบบด้วยบัญชี Google เพื่อสร้าง Google Spreadsheet สำหรับบันทึกผลการแข่งขันนี้
+          {/* Connected Summary Card */}
+          {isConnected && !isEditingUrl && (
+            <div className="p-3 rounded-xl bg-emerald-950/40 border border-emerald-700/50 space-y-2.5">
+              <div className="flex items-center justify-between gap-2">
+                <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-400">
+                  <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span className="break-words">
+                    {activeSheetTitle ? `เชื่อมต่อแล้ว: ${activeSheetTitle}` : 'เชื่อมต่อ Google Sheet ถาวรแล้ว'}
+                  </span>
+                </span>
+                <span className="text-[9px] bg-emerald-900 text-emerald-200 px-1.5 py-0.5 rounded font-mono shrink-0">
+                  ALWAYS ON
+                </span>
+              </div>
+
+              <p className="text-[11px] text-slate-300 leading-relaxed">
+                ไม่ต้องล็อกอินอีกต่อไป — ข้อมูลผู้เล่น ({match.team1.name} vs {match.team2.name}),
+                สกอร์เซต, แต้มต่อแต้ม และสถิติทั้งหมดจะบันทึกสดอัตโนมัติตลอดเวลา
               </p>
 
-              <button
-                onClick={handleSignIn}
-                disabled={isLoading}
-                className="flex items-center gap-2 px-3.5 py-2 bg-white text-slate-800 font-semibold text-xs rounded-xl shadow-md hover:bg-slate-100 active:scale-98 transition"
-              >
-                <svg className="w-4 h-4" viewBox="0 0 48 48">
-                  <path
-                    fill="#EA4335"
-                    d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"
-                  />
-                  <path
-                    fill="#4285F4"
-                    d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"
-                  />
-                  <path
-                    fill="#FBBC05"
-                    d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"
-                  />
-                  <path
-                    fill="#34A853"
-                    d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"
-                  />
-                </svg>
-                <span>{isLoading ? 'กำลังเข้าสู่ระบบ...' : 'ลงชื่อเข้าใช้ด้วย Google (Sign in)'}</span>
-              </button>
-            </div>
-          ) : (
-            <div className="space-y-2.5">
-              {/* User Profile Card */}
-              <div className="flex items-center justify-between p-2 rounded-xl bg-slate-950/60 border border-slate-800">
-                <div className="flex items-center gap-2">
-                  {user.photoURL ? (
-                    <img
-                      src={user.photoURL}
-                      alt={user.displayName || 'User'}
-                      className="w-6 h-6 rounded-full border border-slate-700"
-                    />
-                  ) : (
-                    <div className="w-6 h-6 rounded-full bg-emerald-700 flex items-center justify-center text-[10px] font-bold text-white">
-                      {user.email?.charAt(0).toUpperCase()}
-                    </div>
-                  )}
-                  <div>
-                    <div className="text-[11px] font-bold text-white leading-tight">
-                      {user.displayName || 'Google User'}
-                    </div>
-                    <div className="text-[9px] text-slate-400 leading-tight">{user.email}</div>
-                  </div>
-                </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                {activeSheetUrl && (
+                  <a
+                    href={activeSheetUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition shadow-sm"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>เปิดดูใน Google Sheets</span>
+                  </a>
+                )}
 
                 <button
-                  onClick={handleSignOut}
-                  className="flex items-center gap-1 text-[10px] text-slate-400 hover:text-rose-400 p-1 rounded-lg hover:bg-slate-800 transition"
-                  title="ออกจากระบบ"
+                  onClick={handleSyncAllNow}
+                  disabled={isManualSyncing}
+                  className={`py-2 px-3 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition shadow-sm ${
+                    !activeSheetUrl ? 'sm:col-span-2' : ''
+                  }`}
                 >
-                  <LogOut className="w-3 h-3" />
-                  <span>ออกจากระบบ</span>
+                  <Zap className={`w-3.5 h-3.5 ${isManualSyncing ? 'animate-spin' : ''}`} />
+                  <span>{isManualSyncing ? 'กำลังซิงค์ข้อมูล...' : 'ซิงค์ข้อมูลทั้งหมดเดี๋ยวนี้'}</span>
                 </button>
               </div>
 
-              {/* Active Spreadsheet Details */}
-              {activeSheetUrl ? (
-                <div className="p-3 rounded-xl bg-emerald-950/40 border border-emerald-700/50 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-400">
-                      <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
-                      <span>เชื่อมต่อกับ Google Sheet แล้ว</span>
-                    </span>
-                    <span className="text-[9px] bg-emerald-900 text-emerald-200 px-1.5 py-0.5 rounded font-mono">
-                      LIVE SYNC
-                    </span>
-                  </div>
+              <div className="pt-1 flex items-center justify-between text-[10px]">
+                <button
+                  type="button"
+                  onClick={() => setIsEditingUrl(true)}
+                  className="text-slate-400 hover:text-white underline transition flex items-center gap-1"
+                >
+                  <Link2 className="w-3 h-3" />
+                  <span>เปลี่ยนลิงก์ Google Sheet</span>
+                </button>
 
-                  <p className="text-[11px] text-slate-300">
-                    ข้อมูลผู้เล่น ({match.team1.name} vs {match.team2.name}), สกอร์เซต, แต้มต่อแต้ม และสถิติทั้งหมดจะบันทึกสดลง Google Sheet นี้
-                  </p>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-0.5">
-                    <a
-                      href={activeSheetUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition shadow-sm"
-                    >
-                      <ExternalLink className="w-3.5 h-3.5" />
-                      <span>เปิดดูใน Google Sheets</span>
-                    </a>
-
-                    <button
-                      onClick={handleSyncAllNow}
-                      disabled={isManualSyncing}
-                      className="py-2 px-3 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition shadow-sm"
-                      title="ซิงค์ข้อมูลทั้งหมด (ทั้งชื่อ สกอร์ และแต้ม) ลงในชีตทันที"
-                    >
-                      <Zap className={`w-3.5 h-3.5 ${isManualSyncing ? 'animate-spin' : ''}`} />
-                      <span>{isManualSyncing ? 'กำลังซิงค์ข้อมูล...' : 'ซิงค์ข้อมูลทั้งหมดเดี๋ยวนี้'}</span>
-                    </button>
-                  </div>
-
-                  <div className="pt-1 flex justify-end">
-                    <button
-                      onClick={handleCreateSheet}
-                      disabled={isLoading}
-                      className="text-[10px] text-slate-400 hover:text-white underline transition"
-                    >
-                      {isLoading ? 'กำลังสร้าง...' : '+ สร้างชีตใหม่สำหรับแมตช์นี้'}
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800 flex flex-col items-center text-center gap-2">
-                  <p className="text-xs text-slate-300">
-                    สร้างไฟล์ Google Spreadsheet สำหรับแมตช์{' '}
-                    <strong className="text-white">
-                      {match.team1.name} vs {match.team2.name}
-                    </strong>
-                  </p>
-
-                  <button
-                    onClick={handleCreateSheet}
-                    disabled={isLoading}
-                    className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 font-bold text-xs text-white shadow-lg flex items-center justify-center gap-2 transition"
-                  >
-                    <FileSpreadsheet className="w-4 h-4" />
-                    <span>{isLoading ? 'กำลังสร้างชีต...' : 'สร้าง Google Sheet สำหรับแมตช์นี้'}</span>
-                  </button>
-                </div>
-              )}
+                <button
+                  type="button"
+                  onClick={handleDisconnect}
+                  className="text-rose-400/80 hover:text-rose-300 transition flex items-center gap-1"
+                >
+                  <Unlink className="w-3 h-3" />
+                  <span>ยกเลิกการเชื่อมต่อ</span>
+                </button>
+              </div>
             </div>
           )}
+
+          {/* Webhook URL Input Form */}
+          {isEditingUrl && (
+            <form
+              onSubmit={handleConnectAndSync}
+              className="p-3 rounded-xl bg-slate-950/60 border border-slate-800 space-y-2.5"
+            >
+              <div className="flex items-center justify-between">
+                <label className="text-[11px] font-bold text-emerald-400 flex items-center gap-1.5">
+                  <Link2 className="w-3.5 h-3.5" />
+                  <span>ลิงก์ Google Apps Script Web App URL (ตั้งค่าครั้งเดียว)</span>
+                </label>
+                {isConnected && (
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingUrl(false)}
+                    className="text-[10px] text-slate-400 hover:text-white"
+                  >
+                    ยกเลิก
+                  </button>
+                )}
+              </div>
+
+              <input
+                type="url"
+                value={urlInput}
+                onChange={(e) => setUrlInput(e.target.value)}
+                placeholder="https://script.google.com/macros/s/.../exec"
+                className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 focus:border-emerald-500 focus:outline-none text-xs text-white placeholder:text-slate-500 font-mono"
+                required
+              />
+
+              <button
+                type="submit"
+                disabled={isConnecting || !urlInput.trim()}
+                className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 font-bold text-xs text-white shadow-lg flex items-center justify-center gap-2 transition"
+              >
+                <CheckCircle className="w-4 h-4" />
+                <span>
+                  {isConnecting
+                    ? 'กำลังทดสอบการเชื่อมต่อและซิงค์...'
+                    : 'เชื่อมต่อและบันทึกถาวร (ไม่ต้องล็อกอิน)'}
+                </span>
+              </button>
+            </form>
+          )}
+
+          {/* Collapsible 3-Step Setup Guide */}
+          <div className="rounded-xl bg-slate-950/50 border border-slate-800 overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setShowGuide((v) => !v)}
+              className="w-full px-3 py-2 flex items-center justify-between text-[11px] font-bold text-slate-300 hover:bg-slate-900/60 transition"
+            >
+              <span>วิธีเชื่อม Google Sheet แบบไม่ต้องล็อกอิน (ทำครั้งเดียว ใช้ได้ตลอด)</span>
+              {showGuide ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            </button>
+
+            {showGuide && (
+              <div className="px-3 pb-3 pt-1 space-y-2 border-t border-slate-800/80 text-[11px] text-slate-300">
+                <ol className="list-decimal list-inside space-y-1 text-slate-300 leading-relaxed">
+                  <li>
+                    เปิดไฟล์ Google Sheet ที่ต้องการใช้งาน → กดเมนู{' '}
+                    <strong className="text-white">ส่วนขยาย (Extensions)</strong> →{' '}
+                    <strong className="text-white">Apps Script</strong>
+                  </li>
+                  <li>
+                    ลบโค้ดเดิมออกทั้งหมด แล้วกดปุ่ม{' '}
+                    <strong className="text-emerald-400">คัดลอกโค้ด Apps Script</strong> ด้านล่างไปวางแทน จากนั้นกดบันทึก (💾)
+                  </li>
+                  <li>
+                    กดปุ่ม <strong className="text-white">ทำให้ใช้งานได้ (Deploy)</strong> →{' '}
+                    <strong className="text-white">การทำให้ใช้งานได้รายการใหม่</strong> → เลือกประเภท{' '}
+                    <strong className="text-white">เว็บแอป (Web app)</strong> → ช่อง{' '}
+                    <strong className="text-amber-300">ผู้ที่มีสิทธิ์เข้าถึง เลือก &quot;ทุกคน (Anyone)&quot;</strong> → กด Deploy แล้วคัดลอกลิงก์{' '}
+                    <span className="font-mono text-emerald-300">/exec</span> มาวางด้านบนได้เลย!
+                  </li>
+                </ol>
+
+                <button
+                  type="button"
+                  onClick={handleCopyScript}
+                  className="w-full py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-emerald-300 font-bold text-xs flex items-center justify-center gap-1.5 transition"
+                >
+                  {copiedScript ? (
+                    <>
+                      <Check className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>คัดลอกโค้ด Apps Script แล้ว!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3.5 h-3.5" />
+                      <span>คัดลอกโค้ด Apps Script (1 คลิก)</span>
+                    </>
+                  )}
+                </button>
+
+                <pre className="max-h-28 overflow-y-auto p-2 rounded-lg bg-slate-900 border border-slate-800 text-[9px] text-slate-400 font-mono leading-snug select-all">
+                  {APPS_SCRIPT_CODE}
+                </pre>
+              </div>
+            )}
+          </div>
 
           {/* Feature summary bullet list */}
           <div className="text-[10px] text-slate-400 space-y-0.5 bg-slate-950/40 p-2 rounded-xl border border-slate-800/80">
@@ -344,7 +412,7 @@ export const SheetsSyncModal: React.FC<SheetsSyncModalProps> = ({
           </div>
         </div>
 
-        {/* Sticky Modal Footer - Always easy to tap close */}
+        {/* Sticky Modal Footer */}
         <div className="p-2.5 bg-slate-950/80 border-t border-slate-800/80 flex items-center justify-end shrink-0">
           <button
             onClick={onClose}

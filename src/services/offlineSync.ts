@@ -1,5 +1,9 @@
 import { MatchState, PointRecord } from '../types/tennis';
-import { appendPointToSheet, updateMatchSummarySheet } from './googleSheets';
+import {
+  appendPointToSheet,
+  getSheetsWebhookUrl,
+  updateMatchSummarySheet,
+} from './googleSheets';
 
 const QUEUE_STORAGE_KEY = 'tennispro_offline_queue_v1';
 const CURRENT_MATCH_KEY = 'tennispro_saved_match_v1';
@@ -7,7 +11,7 @@ const MATCH_HISTORY_KEY = 'tennispro_match_history_v1';
 const SYNCED_POINTS_KEY = 'tennispro_synced_point_ids_v1';
 
 export interface QueuedPointItem {
-  spreadsheetId: string;
+  webhookUrl: string;
   point: PointRecord;
   matchSnapshot: MatchState;
   queuedAt: number;
@@ -26,7 +30,6 @@ class OfflineSyncManager {
 
     if (typeof window !== 'undefined') {
       window.addEventListener('online', () => {
-        console.log('Network online detected. Triggering queue auto-sync...');
         this.processQueue();
       });
 
@@ -43,7 +46,13 @@ class OfflineSyncManager {
     try {
       const saved = localStorage.getItem(QUEUE_STORAGE_KEY);
       if (saved) {
-        this.queue = JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          // Only retain valid webhook URL entries (migrating away from legacy spreadsheetId queue items)
+          this.queue = parsed.filter(
+            (item) => typeof item?.webhookUrl === 'string' && item.webhookUrl.startsWith('http')
+          );
+        }
       }
     } catch (e) {
       console.warn('Failed to load offline queue:', e);
@@ -163,7 +172,7 @@ class OfflineSyncManager {
   }
 
   /**
-   * Upsert a match into local match history (retains last 100 matches, stripped of undo/redo stacks to save quota)
+   * Upsert a match into local match history (retains last 100 matches, stripped of redo stack to save quota)
    */
   public saveMatchToHistory(match: MatchState) {
     try {
@@ -201,15 +210,17 @@ class OfflineSyncManager {
   }
 
   /**
-   * Enqueue a point to be synced or sync immediately if online with Idempotency
+   * Enqueue a point to be synced or sync immediately via login-free Google Sheets webhook
    */
-  public async queuePoint(spreadsheetId: string, point: PointRecord, match: MatchState) {
+  public async queuePoint(webhookUrl: string, point: PointRecord, match: MatchState) {
     this.saveMatchLocally(match);
 
-    // If completely offline or already syncing items, enqueue
+    if (!webhookUrl) return;
+
+    // If completely offline, enqueue for automatic retry
     if (!navigator.onLine) {
       this.queue.push({
-        spreadsheetId,
+        webhookUrl,
         point,
         matchSnapshot: match,
         queuedAt: Date.now(),
@@ -218,21 +229,21 @@ class OfflineSyncManager {
       return;
     }
 
-    // Attempt live sync with idempotency check
+    // Attempt live sync with idempotency check (appendPointToSheet updates all 3 tabs in one request)
     try {
       if (!this.syncedPointIds.has(point.id)) {
-        await appendPointToSheet(spreadsheetId, point, match);
+        await appendPointToSheet(webhookUrl, point, match);
         this.syncedPointIds.add(point.id);
         this.saveSyncedPointIds();
+      } else {
+        await updateMatchSummarySheet(webhookUrl, match);
       }
-
-      await updateMatchSummarySheet(spreadsheetId, match);
       this.lastSuccessfulSyncTime = Date.now();
       this.notify();
     } catch (err) {
       console.warn('Live sync failed or partial, adding to offline retry queue:', err);
       this.queue.push({
-        spreadsheetId,
+        webhookUrl,
         point,
         matchSnapshot: match,
         queuedAt: Date.now(),
@@ -255,24 +266,28 @@ class OfflineSyncManager {
     try {
       while (this.queue.length > 0) {
         const item = this.queue[0];
-        
-        // Idempotency: only append if not already recorded in Google Sheet
+        const targetUrl = item.webhookUrl || getSheetsWebhookUrl();
+
+        if (!targetUrl) {
+          this.queue.shift();
+          this.saveQueue();
+          continue;
+        }
+
         if (!this.syncedPointIds.has(item.point.id)) {
-          await appendPointToSheet(item.spreadsheetId, item.point, item.matchSnapshot);
+          await appendPointToSheet(targetUrl, item.point, item.matchSnapshot);
           this.syncedPointIds.add(item.point.id);
           this.saveSyncedPointIds();
         }
 
-        // Successfully written or was already written, safe to dequeue
         this.queue.shift();
         this.saveQueue();
       }
 
-      // Final summary sync of latest state once queue is emptied
       const savedMatch = this.getLocallySavedMatch();
-      const targetSheetId = localStorage.getItem('tennispro_active_sheet_id');
-      if (savedMatch && targetSheetId) {
-        await updateMatchSummarySheet(targetSheetId, savedMatch);
+      const targetWebhookUrl = getSheetsWebhookUrl();
+      if (savedMatch && targetWebhookUrl) {
+        await updateMatchSummarySheet(targetWebhookUrl, savedMatch);
       }
       this.lastSuccessfulSyncTime = Date.now();
       return true;
