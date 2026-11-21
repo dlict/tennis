@@ -23,3 +23,41 @@ html, body {
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(71, 85, 105, 1);
 }
+
+@keyframes playerReady {
+  0%, 100% {
+    transform: translateY(0px) scaleY(1);
+  }
+  50% {
+    transform: translateY(-1px) scaleY(1.02);
+  }
+}
+
+@keyframes serveSwing {
+  0% {
+    transform: rotate(16deg);
+  }
+  12% {
+    transform: rotate(28deg);
+  }
+  32%, 75% {
+    transform: rotate(0deg);
+  }
+  88% {
+    transform: rotate(-22deg);
+  }
+  100% {
+    transform: rotate(16deg);
+  }
+}
+
+.animate-player-ready {
+  animation: playerReady 2.2s ease-in-out infinite;
+}
+
+.animate-serve-swing {
+  animation: serveSwing 2.6s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: bottom center;
+}
+

@@ -3,6 +3,7 @@ import { appendPointToSheet, updateMatchSummarySheet } from './googleSheets';
 
 const QUEUE_STORAGE_KEY = 'tennispro_offline_queue_v1';
 const CURRENT_MATCH_KEY = 'tennispro_saved_match_v1';
+const MATCH_HISTORY_KEY = 'tennispro_match_history_v1';
 const SYNCED_POINTS_KEY = 'tennispro_synced_point_ids_v1';
 
 export interface QueuedPointItem {
@@ -117,11 +118,14 @@ class OfflineSyncManager {
   }
 
   /**
-   * Save match state locally for instant offline recovery
+   * Save match state locally for instant offline recovery and record into history
    */
   public saveMatchLocally(match: MatchState) {
     try {
       localStorage.setItem(CURRENT_MATCH_KEY, JSON.stringify(match));
+      if (match.pointsHistory.length > 0 || match.isFinished) {
+        this.saveMatchToHistory(match);
+      }
     } catch (e) {
       console.warn('Failed to cache match locally', e);
     }
@@ -140,6 +144,60 @@ class OfflineSyncManager {
     try {
       localStorage.removeItem(CURRENT_MATCH_KEY);
     } catch {}
+  }
+
+  /**
+   * Get all locally stored match history records (sorted newest first)
+   */
+  public getMatchHistory(): MatchState[] {
+    try {
+      const raw = localStorage.getItem(MATCH_HISTORY_KEY);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw) as MatchState[];
+      return Array.isArray(parsed)
+        ? parsed.sort((a, b) => (b.updatedAt || b.createdAt) - (a.updatedAt || a.createdAt))
+        : [];
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Upsert a match into local match history (retains last 100 matches, stripped of undo/redo stacks to save quota)
+   */
+  public saveMatchToHistory(match: MatchState) {
+    try {
+      const list = this.getMatchHistory();
+      const compactMatch: MatchState = {
+        ...match,
+        redoStack: undefined,
+        updatedAt: match.updatedAt || Date.now(),
+      };
+      const idx = list.findIndex((m) => m.id === match.id);
+      if (idx >= 0) {
+        list[idx] = compactMatch;
+      } else {
+        list.unshift(compactMatch);
+      }
+      const trimmed = list
+        .sort((a, b) => (b.updatedAt || b.createdAt) - (a.updatedAt || a.createdAt))
+        .slice(0, 100);
+      localStorage.setItem(MATCH_HISTORY_KEY, JSON.stringify(trimmed));
+    } catch (e) {
+      console.warn('Failed to save match to history:', e);
+    }
+  }
+
+  /**
+   * Remove a match from local match history
+   */
+  public deleteMatchFromHistory(matchId: string) {
+    try {
+      const list = this.getMatchHistory().filter((m) => m.id !== matchId);
+      localStorage.setItem(MATCH_HISTORY_KEY, JSON.stringify(list));
+    } catch (e) {
+      console.warn('Failed to delete match from history:', e);
+    }
   }
 
   /**

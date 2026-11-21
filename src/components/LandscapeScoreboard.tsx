@@ -1,11 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { MatchState, ShotCategory, StrokeType, ErrorDetail } from '../types/tennis';
-import { detectPointContext, getCurrentServeCourt } from '../utils/tennisEngine';
+import { detectPointContext, getCurrentServer } from '../utils/tennisEngine';
 import { InteractiveCourt } from './InteractiveCourt';
-import { PWAInstallButton } from './PWAInstallButton';
 import {
   RotateCcw,
-  RotateCw,
   AlertTriangle,
   BarChart2,
   FileSpreadsheet,
@@ -13,13 +11,12 @@ import {
   Flame,
   Zap,
   Plus,
-  RefreshCw,
   Image as ImageIcon,
   Edit3,
-  UserCheck,
   AlertOctagon,
   Trophy,
   Target,
+  History,
 } from 'lucide-react';
 
 interface LandscapeScoreboardProps {
@@ -38,12 +35,10 @@ interface LandscapeScoreboardProps {
   onOpenDetailModal: (mode: 'winner' | 'error', team: 'team1' | 'team2') => void;
   onOpenEditPlayers: () => void;
   onUndo: () => void;
-  onRedo?: () => void;
-  canRedo?: boolean;
   onFirstServeFault: () => void;
   onSecondServeFault: () => void;
   onResetServeFault: () => void;
-  onToggleServer: () => void;
+  onOpenHistory: () => void;
   onOpenAnalytics: () => void;
   onOpenInfographic: () => void;
   onOpenSheetsSync: () => void;
@@ -60,12 +55,10 @@ export const LandscapeScoreboard: React.FC<LandscapeScoreboardProps> = ({
   onOpenDetailModal,
   onOpenEditPlayers,
   onUndo,
-  onRedo,
-  canRedo,
   onFirstServeFault,
   onSecondServeFault,
   onResetServeFault,
-  onToggleServer,
+  onOpenHistory,
   onOpenAnalytics,
   onOpenInfographic,
   onOpenSheetsSync,
@@ -85,75 +78,27 @@ export const LandscapeScoreboard: React.FC<LandscapeScoreboardProps> = ({
   const isServerT1 = currentServerTeam === 'team1';
   const isServerT2 = currentServerTeam === 'team2';
 
-
-
   // Total games played in set
   const totalGamesInSet = currentSet.team1Games + currentSet.team2Games;
 
-  // Change ends: In standard games after odd games (1, 3, 5...), or in tiebreak every 6 points (6, 12, 18...)
-  const isTiebreakChangeEnds =
-    currentGame.isTiebreak &&
-    currentGame.team1Points + currentGame.team2Points > 0 &&
-    (currentGame.team1Points + currentGame.team2Points) % 6 === 0;
-
-  const isStandardChangeEnds =
-    !currentGame.isTiebreak &&
-    totalGamesInSet > 0 &&
-    totalGamesInSet % 2 === 1 &&
-    currentGame.team1Points === 0 &&
-    currentGame.team2Points === 0;
-
-  const isChangeEndsNow = isTiebreakChangeEnds || isStandardChangeEnds;
-
-  const serveCourt = getCurrentServeCourt(currentGame);
-  const serverPlayerName = isServerT1
-    ? match.team1.players[match.currentServerPlayerIndex]?.name || match.team1.name
-    : match.team2.players[match.currentServerPlayerIndex]?.name || match.team2.name;
+  const currentServerInfo = getCurrentServer(match);
+  const serverPlayerName = currentServerInfo.playerName;
 
   return (
     <div className="h-screen w-screen flex flex-col bg-slate-950 text-slate-100 overflow-hidden select-none">
       {/* 1. TOP STATUS BAR */}
-      <header className="h-10 shrink-0 bg-slate-900/95 border-b border-slate-800 px-3 flex items-center justify-between text-xs backdrop-blur-xs z-30">
-        {/* Left: App Logo & Mode */}
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1.5 font-black text-emerald-400 tracking-wide text-xs">
+      <header className="h-10 shrink-0 bg-slate-900/95 border-b border-slate-800 px-2.5 sm:px-3 flex items-center justify-between gap-2 text-xs backdrop-blur-xs z-30">
+        {/* Left: App Logo */}
+        <div className="flex items-center gap-1.5 shrink-0 whitespace-nowrap">
+          <div className="flex items-center gap-1.5 font-black text-emerald-400 tracking-wide text-xs sm:text-sm">
             <span className="text-base leading-none">🎾</span>
-            <span className="hidden sm:inline">TennisPro</span>
+            <span>TennisPro</span>
           </div>
-
-          <span className="bg-slate-800 border border-slate-700 text-slate-300 px-2 py-0.5 rounded-full text-[10px] font-semibold">
-            {match.settings.type === 'doubles' ? 'คู่ (Doubles)' : 'เดี่ยว (Singles)'} • Set {currentSetIndex + 1}
-          </span>
-
-          {/* Change Ends Alert */}
-          {isChangeEndsNow && (
-            <span className="bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded-full text-[10px] font-bold animate-pulse flex items-center gap-1">
-              <RefreshCw className="w-3 h-3" />
-              <span>เปลี่ยนแดน</span>
-            </span>
-          )}
-
-          {/* Point Context Alert */}
-          {pointContext.isMatchPoint && (
-            <span className="bg-amber-500 text-slate-950 px-2 py-0.5 rounded-full text-[10px] font-black tracking-wider animate-bounce">
-              🏆 MATCH POINT
-            </span>
-          )}
-          {pointContext.isSetPoint && !pointContext.isMatchPoint && (
-            <span className="bg-rose-500 text-white px-2 py-0.5 rounded-full text-[10px] font-black tracking-wider animate-pulse">
-              🎯 SET POINT
-            </span>
-          )}
-          {pointContext.isBreakPoint && !pointContext.isSetPoint && !pointContext.isMatchPoint && (
-            <span className="bg-indigo-500 text-white px-2 py-0.5 rounded-full text-[10px] font-black tracking-wider">
-              ⚡ BREAK POINT
-            </span>
-          )}
         </div>
 
         {/* Center: Live Set Scores Table */}
-        <div className="flex items-center gap-1 bg-slate-950/80 px-2 py-0.5 rounded-lg border border-slate-800">
-          <span className="text-[10px] text-slate-400 font-bold uppercase mr-1">SETS:</span>
+        <div className="flex items-center gap-1 bg-slate-950/80 px-2 py-0.5 rounded-lg border border-slate-800 shrink-0 whitespace-nowrap">
+          <span className="text-[10px] text-slate-400 font-bold uppercase mr-0.5">SETS:</span>
           {sets.map((s, idx) => {
             const isCurrent = idx === currentSetIndex;
             return (
@@ -223,8 +168,15 @@ export const LandscapeScoreboard: React.FC<LandscapeScoreboardProps> = ({
             <span className="hidden sm:inline">กราฟ</span>
           </button>
 
-          {/* PWA Install Button */}
-          <PWAInstallButton />
+          {/* History Button */}
+          <button
+            onClick={onOpenHistory}
+            className="flex items-center gap-1 px-2 py-1 rounded-lg bg-amber-950/50 hover:bg-amber-900/60 border border-amber-700/60 text-amber-300 text-[11px] font-semibold transition"
+            title="ประวัติการแข่งขันทั้งหมด"
+          >
+            <History className="w-3.5 h-3.5 text-amber-400" />
+            <span className="hidden sm:inline">ประวัติ</span>
+          </button>
 
           {/* Reset / Start New Match Button */}
           <button
@@ -247,51 +199,64 @@ export const LandscapeScoreboard: React.FC<LandscapeScoreboardProps> = ({
         </div>
       </header>
 
-      {/* 2. MAIN HORIZONTAL SCORING ARENA */}
+      {/* 2. MAIN HORIZONTAL SCORING ARENA (Balanced 3 : 6 : 3 Proportions) */}
       <main className="flex-1 min-h-0 grid grid-cols-12 gap-1.5 p-1.5 relative overflow-hidden">
-        {/* ================= LEFT SIDE: TEAM 1 CARD (Col 1-4) ================= */}
-        <div className="col-span-4 h-full flex flex-col justify-between rounded-2xl bg-gradient-to-b from-slate-900/95 to-slate-950 border border-emerald-800/60 p-2 sm:p-2.5 relative shadow-xl overflow-hidden">
-          {/* Header */}
-          <div className="flex items-center justify-between pb-1.5 border-b border-slate-800/80 shrink-0">
+        {/* ================= LEFT SIDE: TEAM 1 SCORE BUTTON CARD (Col 1-3) ================= */}
+        <div className="col-span-3 h-full flex flex-col rounded-2xl bg-gradient-to-b from-slate-900/95 to-slate-950 border border-emerald-700/70 relative shadow-xl overflow-hidden">
+          {/* Team Header (wraps onto new line cleanly without ellipsis truncation) */}
+          <div className="flex items-start justify-between gap-1 px-2 py-1.5 border-b border-slate-800/80 shrink-0 bg-slate-900/90">
             <div
               onClick={onOpenEditPlayers}
-              className="flex items-center gap-1.5 cursor-pointer hover:opacity-80 transition truncate"
+              className="flex items-start gap-1 cursor-pointer hover:opacity-80 transition min-w-0 flex-1"
               title="คลิกเพื่อแก้ไขชื่อผู้เล่น"
             >
-              <h2 className="text-xs sm:text-sm font-black text-emerald-400 truncate leading-tight">
-                {team1.name}
-              </h2>
-              <Edit3 className="w-3 h-3 text-slate-500 hover:text-emerald-300 shrink-0" />
+              <div className="min-w-0 flex-1">
+                {team1.players.length > 1 ? (
+                  <h2 className="text-[11px] sm:text-xs font-black text-emerald-400 leading-tight break-words">
+                    {team1.players.map((p, idx) => (
+                      <span key={p.id || idx} className="inline-block mr-1">
+                        {p.name}
+                        {idx < team1.players.length - 1 ? ' /' : ''}
+                      </span>
+                    ))}
+                  </h2>
+                ) : (
+                  <h2 className="text-xs sm:text-sm font-black text-emerald-400 leading-tight break-words">
+                    {team1.name}
+                  </h2>
+                )}
+              </div>
+              <Edit3 className="w-3 h-3 text-slate-500 hover:text-emerald-300 shrink-0 mt-0.5" />
             </div>
 
-            <div className="flex items-center gap-1">
-              <span className="text-[10px] sm:text-xs font-bold text-slate-300 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
-                {currentSet.team1Games} เกม
-              </span>
-            </div>
+            <span className="text-[10px] sm:text-xs font-bold text-slate-200 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800 shrink-0 whitespace-nowrap">
+              {currentSet.team1Games} เกม
+            </span>
           </div>
 
-          {/* Giant Touch-to-Score Button (แตะที่คะแนนเพื่อเพิ่มแต้มได้โดยตรง) */}
+          {/* Full-Area Touch-to-Score Button (ทั้งการ์ดเป็นปุ่มกด +1 แต้ม) */}
           <button
             type="button"
             onClick={() => {
               if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(30);
               onAwardPoint('team1', 'regular_point');
             }}
-            className="flex-1 my-1.5 rounded-2xl bg-slate-900/60 hover:bg-emerald-950/40 active:scale-95 border-2 border-emerald-500/30 hover:border-emerald-400/80 text-center flex flex-col items-center justify-center transition-all duration-150 cursor-pointer shadow-inner group relative overflow-hidden"
-            title="แตะที่ตัวเลขคะแนนนี้เพื่อเพิ่มแต้มให้ทีม 1 (+1 แต้ม)"
+            className="flex-1 w-full bg-slate-900/40 hover:bg-emerald-950/50 active:bg-emerald-900/60 active:scale-[0.98] text-center flex flex-col items-center justify-center p-1.5 sm:p-2 transition-all duration-150 cursor-pointer group relative overflow-hidden"
+            title="แตะพื้นที่นี้เพื่อเพิ่มแต้มให้ทีม 1 (+1 แต้ม)"
           >
-            {/* Server Badge on Head of Score */}
+            {/* Server Badge on Head of Score (wraps cleanly without ...) */}
             {isServerT1 && (
-              <div className="mb-1 px-2.5 py-0.5 rounded-full bg-yellow-400 text-slate-950 font-black text-[10px] sm:text-xs flex items-center gap-1 shadow animate-pulse">
-                <span>🎾</span>
-                <span className="truncate">{serverPlayerName} เสิร์ฟ ({isFirstServeFault ? 'ลูก 2' : 'ลูก 1'})</span>
+              <div className="mb-1 px-2 py-0.5 rounded-xl bg-yellow-400 text-slate-950 font-black text-[9px] sm:text-[10.5px] flex items-center justify-center gap-1 shadow max-w-full leading-tight text-center">
+                <span className="shrink-0">🎾</span>
+                <span className="break-words">
+                  {serverPlayerName} ({isFirstServeFault ? 'ลูก 2' : 'ลูก 1'})
+                </span>
               </div>
             )}
 
             {/* Giant Score Display */}
             <div
-              className={`font-mono text-6xl sm:text-7xl lg:text-8xl font-black tracking-tight drop-shadow-lg transition-transform group-hover:scale-105 ${
+              className={`font-mono text-5xl sm:text-7xl lg:text-8xl font-black tracking-tight drop-shadow-lg transition-transform group-hover:scale-105 leading-none ${
                 currentGame.team1Display === 'AD' ? 'text-amber-300' : 'text-white'
               }`}
             >
@@ -299,21 +264,22 @@ export const LandscapeScoreboard: React.FC<LandscapeScoreboardProps> = ({
             </div>
 
             {currentGame.isTiebreak && (
-              <span className="text-[10px] font-bold text-amber-400 uppercase tracking-widest mt-0.5">
+              <span className="text-[9.5px] font-bold text-amber-400 uppercase tracking-widest mt-1">
                 TIE-BREAK
               </span>
             )}
 
-            {/* Clear tap affordance label */}
-            <div className="mt-1 flex items-center gap-1 text-[10px] text-emerald-400/80 font-bold group-hover:text-emerald-300 transition">
-              <span>👆 แตะที่นี่เพื่อ +1 แต้ม</span>
+            {/* Clear tap affordance */}
+            <div className="mt-1.5 sm:mt-2 px-2 py-0.5 sm:py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 flex items-center gap-1 text-[9px] sm:text-[10px] text-emerald-300 font-bold group-hover:bg-emerald-500/25 transition whitespace-nowrap max-w-full">
+              <Plus className="w-3 h-3 shrink-0" />
+              <span className="truncate">แตะเพื่อ +1 แต้ม</span>
             </div>
           </button>
         </div>
 
-        {/* ================= CENTER: COURT & UNIFIED REFEREE DOCK (Col 5-8) ================= */}
-        <div className="col-span-4 h-full flex flex-col justify-between rounded-2xl bg-slate-900/90 border border-slate-800 p-2 overflow-hidden shadow-xl gap-1.5">
-          {/* 1. ส่วนบน: ข้อความสถานะสำคัญของเกม (Match Point / Set Point / Break Point / Game Over) */}
+        {/* ================= CENTER: COURT & UNIFIED SCORING DOCK (Col 4-9, 50% width) ================= */}
+        <div className="col-span-6 h-full flex flex-col justify-between rounded-2xl bg-slate-900/90 border border-slate-800 p-2 overflow-hidden shadow-xl gap-1.5">
+          {/* 1. ส่วนบน: ข้อความสถานะสำคัญของเกม */}
           {(pointContext.badgeType === 'match' ||
             pointContext.badgeType === 'set' ||
             pointContext.badgeType === 'break' ||
@@ -321,7 +287,7 @@ export const LandscapeScoreboard: React.FC<LandscapeScoreboardProps> = ({
             match.isFinished ||
             isFirstServeFault ||
             (currentGame.team1Points === 0 && currentGame.team2Points === 0 && totalGamesInSet > 0)) && (
-            <div className="shrink-0 h-10 sm:h-11 w-full flex items-center justify-center">
+            <div className="shrink-0 h-9 sm:h-10 w-full flex items-center justify-center">
               {pointContext.badgeType === 'match' ? (
                 <div className="w-full h-full py-1 px-3 rounded-xl bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 text-slate-950 flex items-center justify-between shadow-lg shadow-amber-500/30 border border-amber-300 animate-pulse">
                   <div className="flex items-center gap-2 min-w-0">
@@ -448,183 +414,68 @@ export const LandscapeScoreboard: React.FC<LandscapeScoreboardProps> = ({
             </div>
           )}
 
-          {/* 2. ส่วนกลาง: คอร์ตเทนนิสแสดงทิศทางการเสิร์ฟ */}
+          {/* 2. ส่วนกลาง: คอร์ตเทนนิสแสดงนักกีฬาและวิถีลูกเทนนิสเต็มพื้นที่ */}
           <div className="flex-1 flex flex-col items-center justify-center min-h-0 w-full overflow-hidden">
             <InteractiveCourt match={match} />
           </div>
-
-          {/* 3. ส่วนล่าง: ศูนย์รวมปุ่มควบคุมแบบรวมที่เดียว (Unified Central Control Dock) */}
-          <div className="shrink-0 pt-1.5 border-t border-slate-800/80 flex flex-col gap-1.5">
-            {/* ROW 1: Serve Controls (จัดการการเสิร์ฟอัตโนมัติ ไม่แยกซ้ายขวา) */}
-            <div className="grid grid-cols-3 gap-1.5 w-full">
-              {/* Button 1: Ace */}
-              <button
-                type="button"
-                onClick={() => {
-                  if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(30);
-                  onAwardPoint(currentServerTeam, 'ace', { stroke: 'serve' });
-                }}
-                className="h-10 sm:h-11 px-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 active:scale-95 border-2 border-amber-500/60 text-amber-300 font-bold text-xs flex items-center justify-center gap-1 transition shadow-xs"
-                title={`เสิร์ฟเอซ (+1 แต้มให้ ${serverPlayerName})`}
-              >
-                <Zap className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                <span className="truncate">เสิร์ฟเอซ</span>
-              </button>
-
-              {/* Button 2: 1st Fault or Double Fault */}
-              {!isFirstServeFault ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(30);
-                    onFirstServeFault();
-                  }}
-                  className="h-10 sm:h-11 px-2 rounded-xl bg-slate-800 hover:bg-slate-750 active:scale-98 border-2 border-amber-500/50 text-amber-300 font-bold text-xs flex items-center justify-center gap-1 transition shadow-xs"
-                  title="เสิร์ฟแรกติดเน็ต/ออก -> เปลี่ยนเป็นเสิร์ฟลูกสอง"
-                >
-                  <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                  <span className="truncate">ฟอลต์แรก</span>
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(40);
-                    onSecondServeFault();
-                  }}
-                  className="h-10 sm:h-11 px-2 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 active:scale-95 text-white font-black text-xs flex items-center justify-center gap-1 border-2 border-red-300 shadow-md animate-pulse transition"
-                  title="ดับเบิ้ลฟอลต์ -> เสียแต้มให้อีกฝ่ายทันที"
-                >
-                  <AlertOctagon className="w-3.5 h-3.5 text-white shrink-0" />
-                  <span className="truncate">ดับเบิ้ลฟอลต์</span>
-                </button>
-              )}
-
-              {/* Button 3: Let / Switch Server */}
-              {isFirstServeFault ? (
-                <button
-                  type="button"
-                  onClick={onResetServeFault}
-                  className="h-10 sm:h-11 px-2 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-98 border-2 border-slate-700 text-slate-300 font-bold text-xs flex items-center justify-center transition"
-                  title="ยกเลิกฟอลต์ (เสิร์ฟใหม่ / Let)"
-                >
-                  <span>เสิร์ฟใหม่ (Let)</span>
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={onToggleServer}
-                  className="h-10 sm:h-11 px-2 rounded-xl bg-slate-800 hover:bg-slate-750 active:scale-98 border-2 border-slate-700 text-slate-300 font-bold text-xs flex items-center justify-center gap-1 transition"
-                  title="สลับฝ่ายเสิร์ฟ"
-                >
-                  <RefreshCw className="w-3 h-3 text-slate-400 shrink-0" />
-                  <span className="truncate">สลับเสิร์ฟ</span>
-                </button>
-              )}
-            </div>
-
-            {/* ROW 2: Detailed Shot Recording & Undo */}
-            <div className="grid grid-cols-3 gap-1.5 w-full">
-              {/* Button 1: Winner Detail */}
-              <button
-                type="button"
-                onClick={() => onOpenDetailModal('winner', currentServerTeam)}
-                className="h-10 sm:h-11 px-2 rounded-xl bg-emerald-950/70 hover:bg-emerald-900/90 active:scale-95 border-2 border-emerald-600/70 text-emerald-300 font-bold text-xs flex items-center justify-center gap-1 transition shadow-sm"
-                title="บันทึกแต้มวินเนอร์ (เลือกคนตี และสโตรก: สแมช, โฟร์แฮนด์, แบ็คแฮนด์, วอลเลย์)"
-              >
-                <Flame className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                <span className="truncate">🏆 วินเนอร์...</span>
-              </button>
-
-              {/* Button 2: Error Detail */}
-              <button
-                type="button"
-                onClick={() => onOpenDetailModal('error', currentServerTeam === 'team1' ? 'team2' : 'team1')}
-                className="h-10 sm:h-11 px-2 rounded-xl bg-rose-950/70 hover:bg-rose-900/90 active:scale-95 border-2 border-rose-600/70 text-rose-300 font-bold text-xs flex items-center justify-center gap-1 transition shadow-sm"
-                title="บันทึกแต้มตีเสีย (เลือกคนตีเสีย และลักษณะการเสีย: ติดเน็ต, ออกหลัง, ออกข้าง)"
-              >
-                <AlertOctagon className="w-3.5 h-3.5 text-rose-400 shrink-0" />
-                <span className="truncate">❌ ตีเสีย...</span>
-              </button>
-
-              {/* Button 3: Undo & Redo Point */}
-              <div className="flex gap-1 h-10 sm:h-11">
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(20);
-                    onUndo();
-                  }}
-                  disabled={match.pointsHistory.length === 0}
-                  className="flex-1 px-1 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-98 disabled:opacity-30 disabled:cursor-not-allowed border-2 border-slate-700 text-slate-200 font-bold text-xs flex items-center justify-center gap-1 transition shadow-sm"
-                  title="ย้อนกลับแต้มล่าสุด (Undo Point)"
-                >
-                  <RotateCcw className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                  <span className="truncate">ถอยแต้ม</span>
-                </button>
-
-                {onRedo && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(20);
-                      onRedo();
-                    }}
-                    disabled={!canRedo}
-                    className="w-9 px-1 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-98 disabled:opacity-20 disabled:cursor-not-allowed border-2 border-slate-700 text-slate-200 font-bold text-xs flex items-center justify-center transition shadow-sm"
-                    title="คืนแต้มที่ย้อนกลับ (Redo Point)"
-                  >
-                    <RotateCw className="w-3.5 h-3.5 text-emerald-400" />
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
         </div>
 
-        {/* ================= RIGHT SIDE: TEAM 2 CARD (Col 9-12) ================= */}
-        <div className="col-span-4 h-full flex flex-col justify-between rounded-2xl bg-gradient-to-b from-slate-900/95 to-slate-950 border border-sky-800/60 p-2 sm:p-2.5 relative shadow-xl overflow-hidden">
-          {/* Header */}
-          <div className="flex items-center justify-between pb-1.5 border-b border-slate-800/80 shrink-0">
+        {/* ================= RIGHT SIDE: TEAM 2 SCORE BUTTON CARD (Col 10-12) ================= */}
+        <div className="col-span-3 h-full flex flex-col rounded-2xl bg-gradient-to-b from-slate-900/95 to-slate-950 border border-sky-700/70 relative shadow-xl overflow-hidden">
+          {/* Team Header (wraps onto new line cleanly without ellipsis truncation) */}
+          <div className="flex items-start justify-between gap-1 px-2 py-1.5 border-b border-slate-800/80 shrink-0 bg-slate-900/90">
             <div
               onClick={onOpenEditPlayers}
-              className="flex items-center gap-1.5 cursor-pointer hover:opacity-80 transition truncate"
+              className="flex items-start gap-1 cursor-pointer hover:opacity-80 transition min-w-0 flex-1"
               title="คลิกเพื่อแก้ไขชื่อผู้เล่น"
             >
-              <h2 className="text-xs sm:text-sm font-black text-sky-400 truncate leading-tight">
-                {team2.name}
-              </h2>
-              <Edit3 className="w-3 h-3 text-slate-500 hover:text-sky-300 shrink-0" />
+              <div className="min-w-0 flex-1">
+                {team2.players.length > 1 ? (
+                  <h2 className="text-[11px] sm:text-xs font-black text-sky-400 leading-tight break-words">
+                    {team2.players.map((p, idx) => (
+                      <span key={p.id || idx} className="inline-block mr-1">
+                        {p.name}
+                        {idx < team2.players.length - 1 ? ' /' : ''}
+                      </span>
+                    ))}
+                  </h2>
+                ) : (
+                  <h2 className="text-xs sm:text-sm font-black text-sky-400 leading-tight break-words">
+                    {team2.name}
+                  </h2>
+                )}
+              </div>
+              <Edit3 className="w-3 h-3 text-slate-500 hover:text-sky-300 shrink-0 mt-0.5" />
             </div>
 
-            <div className="flex items-center gap-1">
-              <span className="text-[10px] sm:text-xs font-bold text-slate-300 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
-                {currentSet.team2Games} เกม
-              </span>
-            </div>
+            <span className="text-[10px] sm:text-xs font-bold text-slate-200 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800 shrink-0 whitespace-nowrap">
+              {currentSet.team2Games} เกม
+            </span>
           </div>
 
-          {/* Giant Touch-to-Score Button (แตะที่คะแนนเพื่อเพิ่มแต้มได้โดยตรง) */}
+          {/* Full-Area Touch-to-Score Button (ทั้งการ์ดเป็นปุ่มกด +1 แต้ม) */}
           <button
             type="button"
             onClick={() => {
               if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(30);
               onAwardPoint('team2', 'regular_point');
             }}
-            className="flex-1 my-1.5 rounded-2xl bg-slate-900/60 hover:bg-sky-950/40 active:scale-95 border-2 border-sky-500/30 hover:border-sky-400/80 text-center flex flex-col items-center justify-center transition-all duration-150 cursor-pointer shadow-inner group relative overflow-hidden"
-            title="แตะที่ตัวเลขคะแนนนี้เพื่อเพิ่มแต้มให้ทีม 2 (+1 แต้ม)"
+            className="flex-1 w-full bg-slate-900/40 hover:bg-sky-950/50 active:bg-sky-900/60 active:scale-[0.98] text-center flex flex-col items-center justify-center p-1.5 sm:p-2 transition-all duration-150 cursor-pointer group relative overflow-hidden"
+            title="แตะพื้นที่นี้เพื่อเพิ่มแต้มให้ทีม 2 (+1 แต้ม)"
           >
-            {/* Server Badge on Head of Score */}
+            {/* Server Badge on Head of Score (wraps cleanly without ...) */}
             {isServerT2 && (
-              <div className="mb-1 px-2.5 py-0.5 rounded-full bg-yellow-400 text-slate-950 font-black text-[10px] sm:text-xs flex items-center gap-1 shadow animate-pulse">
-                <span>🎾</span>
-                <span className="truncate">{serverPlayerName} เสิร์ฟ ({isFirstServeFault ? 'ลูก 2' : 'ลูก 1'})</span>
+              <div className="mb-1 px-2 py-0.5 rounded-xl bg-yellow-400 text-slate-950 font-black text-[9px] sm:text-[10.5px] flex items-center justify-center gap-1 shadow max-w-full leading-tight text-center">
+                <span className="shrink-0">🎾</span>
+                <span className="break-words">
+                  {serverPlayerName} ({isFirstServeFault ? 'ลูก 2' : 'ลูก 1'})
+                </span>
               </div>
             )}
 
             {/* Giant Score Display */}
             <div
-              className={`font-mono text-6xl sm:text-7xl lg:text-8xl font-black tracking-tight drop-shadow-lg transition-transform group-hover:scale-105 ${
+              className={`font-mono text-5xl sm:text-7xl lg:text-8xl font-black tracking-tight drop-shadow-lg transition-transform group-hover:scale-105 leading-none ${
                 currentGame.team2Display === 'AD' ? 'text-amber-300' : 'text-white'
               }`}
             >
@@ -632,18 +483,120 @@ export const LandscapeScoreboard: React.FC<LandscapeScoreboardProps> = ({
             </div>
 
             {currentGame.isTiebreak && (
-              <span className="text-[10px] font-bold text-amber-400 uppercase tracking-widest mt-0.5">
+              <span className="text-[9.5px] font-bold text-amber-400 uppercase tracking-widest mt-1">
                 TIE-BREAK
               </span>
             )}
 
-            {/* Clear tap affordance label */}
-            <div className="mt-1 flex items-center gap-1 text-[10px] text-sky-400/80 font-bold group-hover:text-sky-300 transition">
-              <span>👆 แตะที่นี่เพื่อ +1 แต้ม</span>
+            {/* Clear tap affordance */}
+            <div className="mt-1.5 sm:mt-2 px-2 py-0.5 sm:py-1 rounded-full bg-sky-500/15 border border-sky-500/30 flex items-center gap-1 text-[9px] sm:text-[10px] text-sky-300 font-bold group-hover:bg-sky-500/25 transition whitespace-nowrap max-w-full">
+              <Plus className="w-3 h-3 shrink-0" />
+              <span className="truncate">แตะเพื่อ +1 แต้ม</span>
             </div>
           </button>
         </div>
       </main>
+
+      {/* 3. BOTTOM SCORING CONTROL DOCK (ส่วนล่างสุด: 1 แถวเต็มจอสำหรับปุ่มกดคะแนน) */}
+      <footer className="shrink-0 w-full px-1.5 pb-1.5 pt-0.5 z-20">
+        <div
+          className={`grid gap-1 sm:gap-1.5 w-full rounded-2xl bg-slate-900/95 border border-slate-800 p-1 sm:p-1.5 shadow-xl ${
+            isFirstServeFault ? 'grid-cols-6' : 'grid-cols-5'
+          }`}
+        >
+          {/* 1. Serve Ace */}
+          <button
+            type="button"
+            onClick={() => {
+              if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(30);
+              onAwardPoint(currentServerTeam, 'ace', { stroke: 'serve' });
+            }}
+            className="h-9 sm:h-11 px-1 sm:px-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 active:scale-95 border border-amber-500/60 text-amber-300 font-bold text-[10.5px] sm:text-xs md:text-sm flex items-center justify-center gap-1 transition shadow-xs min-w-0"
+            title={`เสิร์ฟเอซ (+1 แต้มให้ ${serverPlayerName})`}
+          >
+            <Zap className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400 shrink-0" />
+            <span className="truncate">เสิร์ฟเอซ</span>
+          </button>
+
+          {/* 2. 1st Fault or Double Fault */}
+          {!isFirstServeFault ? (
+            <button
+              type="button"
+              onClick={() => {
+                if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(30);
+                onFirstServeFault();
+              }}
+              className="h-9 sm:h-11 px-1 sm:px-2 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-98 border border-amber-500/50 text-amber-300 font-bold text-[10.5px] sm:text-xs md:text-sm flex items-center justify-center gap-1 transition shadow-xs min-w-0"
+              title="เสิร์ฟแรกติดเน็ต/ออก -> เปลี่ยนเป็นเสิร์ฟลูกสอง"
+            >
+              <AlertTriangle className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400 shrink-0" />
+              <span className="truncate">ฟอลต์แรก</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(40);
+                onSecondServeFault();
+              }}
+              className="h-9 sm:h-11 px-1 sm:px-2 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 active:scale-95 text-white font-black text-[10.5px] sm:text-xs md:text-sm flex items-center justify-center gap-1 border border-red-300 shadow-md animate-pulse transition min-w-0"
+              title="ดับเบิ้ลฟอลต์ -> เสียแต้มให้อีกฝ่ายทันที"
+            >
+              <AlertOctagon className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-white shrink-0" />
+              <span className="truncate">ดับเบิ้ลฟอลต์</span>
+            </button>
+          )}
+
+          {/* 3. Winner Detail */}
+          <button
+            type="button"
+            onClick={() => onOpenDetailModal('winner', currentServerTeam)}
+            className="h-9 sm:h-11 px-1 sm:px-2 rounded-xl bg-emerald-950/80 hover:bg-emerald-900/90 active:scale-95 border border-emerald-600/70 text-emerald-300 font-bold text-[10.5px] sm:text-xs md:text-sm flex items-center justify-center gap-1 transition shadow-sm min-w-0"
+            title="บันทึกแต้มวินเนอร์ (เลือกคนตี และสโตรก: สแมช, โฟร์แฮนด์, แบ็คแฮนด์, วอลเลย์)"
+          >
+            <Flame className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-400 shrink-0" />
+            <span className="truncate">วินเนอร์</span>
+          </button>
+
+          {/* 4. Error Detail */}
+          <button
+            type="button"
+            onClick={() => onOpenDetailModal('error', currentServerTeam === 'team1' ? 'team2' : 'team1')}
+            className="h-9 sm:h-11 px-1 sm:px-2 rounded-xl bg-rose-950/80 hover:bg-rose-900/90 active:scale-95 border border-rose-600/70 text-rose-300 font-bold text-[10.5px] sm:text-xs md:text-sm flex items-center justify-center gap-1 transition shadow-sm min-w-0"
+            title="บันทึกแต้มตีเสีย (เลือกคนตีเสีย และลักษณะการเสีย: ติดเน็ต, ออกหลัง, ออกข้าง)"
+          >
+            <AlertOctagon className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-rose-400 shrink-0" />
+            <span className="truncate">ตีเสีย</span>
+          </button>
+
+          {/* 5. Let (Only shown during 1st-serve fault) */}
+          {isFirstServeFault && (
+            <button
+              type="button"
+              onClick={onResetServeFault}
+              className="h-9 sm:h-11 px-1 sm:px-2 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-98 border border-slate-700 text-slate-200 font-bold text-[10.5px] sm:text-xs md:text-sm flex items-center justify-center gap-1 transition min-w-0"
+              title="ยกเลิกฟอลต์ (เสิร์ฟใหม่ / Let)"
+            >
+              <span className="truncate">เสิร์ฟใหม่ (Let)</span>
+            </button>
+          )}
+
+          {/* 6. Undo Point */}
+          <button
+            type="button"
+            onClick={() => {
+              if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(20);
+              onUndo();
+            }}
+            disabled={match.pointsHistory.length === 0}
+            className="h-9 sm:h-11 px-1 sm:px-2 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-98 disabled:opacity-30 disabled:cursor-not-allowed border border-slate-700 text-slate-200 font-bold text-[10.5px] sm:text-xs md:text-sm flex items-center justify-center gap-1 transition shadow-sm min-w-0"
+            title="ย้อนกลับแต้มล่าสุด (Undo Point)"
+          >
+            <RotateCcw className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400 shrink-0" />
+            <span className="truncate">ถอย</span>
+          </button>
+        </div>
+      </footer>
 
       {/* Reset Match Confirmation Modal */}
       {showResetConfirm && (

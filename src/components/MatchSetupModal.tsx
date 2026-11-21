@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { MatchFormat, MatchSettings, MatchType } from '../types/tennis';
-import { Users, User as UserIcon, Play, Settings2, X, Trash2, Plus, UserPlus } from 'lucide-react';
+import { Users, User as UserIcon, Play, Settings2, X, Trash2, Plus, UserPlus, Smartphone } from 'lucide-react';
+import { PWAInstallButton } from './PWAInstallButton';
 import {
   getSavedPlayerRoster,
   addPlayerToRoster,
@@ -457,6 +458,15 @@ export const MatchSetupModal: React.FC<MatchSetupModalProps> = ({
             <span>เริ่มนับแต้มแมตช์นี้ (Start Match)</span>
           </button>
         </form>
+
+        {/* App Installation Section inside Settings */}
+        <div className="pt-3 border-t border-slate-800 space-y-2">
+          <div className="flex items-center gap-1.5 text-xs font-bold text-slate-300">
+            <Smartphone className="w-4 h-4 text-emerald-400" />
+            <span>ติดตั้งแอปลงบนมือถือ / แท็บเล็ต (PWA)</span>
+          </div>
+          <PWAInstallButton fullWidth />
+        </div>
       </div>
     </div>
   );

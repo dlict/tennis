@@ -2,14 +2,18 @@ import React, { useState } from 'react';
 import { MatchState } from '../types/tennis';
 import { calculateMatchStats } from '../utils/tennisEngine';
 import {
+  exportOverallAnalyticsImage,
+  exportPlayerAnalyticsImage,
+} from '../utils/exportAnalyticsImage';
+import {
   BarChart2,
-  TrendingUp,
   Flame,
   AlertTriangle,
   Zap,
   Target,
   Sparkles,
-  Award,
+  Download,
+  CheckCircle2,
 } from 'lucide-react';
 
 interface AnalyticsViewProps {
@@ -20,6 +24,8 @@ interface AnalyticsViewProps {
 export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ match, onClose }) => {
   const [activeTab, setActiveTab] = useState<'comparison' | 'ai_insights'>('comparison');
   const [selectedPlayerId, setSelectedPlayerId] = useState<string>('all');
+  const [isSavingImage, setIsSavingImage] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
 
   // List of all individual players across both teams
   const allPlayers = [
@@ -234,24 +240,54 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ match, onClose }) 
     return list;
   };
 
+  const handleSaveChartImage = async () => {
+    if (isSavingImage) return;
+    setIsSavingImage(true);
+    try {
+      if (selectedPlayerId !== 'all' && selectedPlayer && playerStats) {
+        await exportPlayerAnalyticsImage({
+          match,
+          player: {
+            name: selectedPlayer.name,
+            team: selectedPlayer.team,
+            teamName: selectedPlayer.teamName,
+            ...playerStats,
+          },
+        });
+      } else {
+        await exportOverallAnalyticsImage({
+          match,
+          stats,
+          metrics,
+          insights: generateInsights(),
+          activeTab,
+        });
+      }
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+    } finally {
+      setIsSavingImage(false);
+    }
+  };
+
   return (
     <div className="w-full h-full flex flex-col bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden text-slate-100">
       {/* Top Header / Tab Selector */}
-      <div className="flex items-center justify-between px-3 py-2 bg-slate-950 border-b border-slate-800">
-        <div className="flex items-center gap-2">
-          <BarChart2 className="w-4 h-4 text-emerald-400" />
-          <h2 className="text-xs font-bold text-white tracking-wide">
+      <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 bg-slate-950 border-b border-slate-800">
+        <div className="flex items-center gap-2 min-w-0">
+          <BarChart2 className="w-4 h-4 text-emerald-400 shrink-0" />
+          <h2 className="text-xs sm:text-sm font-bold text-white tracking-wide truncate">
             การวิเคราะห์ฟอร์มการเล่น (Match Analytics)
           </h2>
         </div>
 
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1.5 flex-wrap">
           <button
             onClick={() => {
               setActiveTab('comparison');
               setSelectedPlayerId('all');
             }}
-            className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition ${
+            className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition whitespace-nowrap ${
               selectedPlayerId === 'all' && activeTab === 'comparison'
                 ? 'bg-emerald-600 text-white'
                 : 'bg-slate-800 text-slate-400 hover:text-white'
@@ -264,7 +300,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ match, onClose }) 
               setActiveTab('ai_insights');
               setSelectedPlayerId('all');
             }}
-            className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition flex items-center gap-1 ${
+            className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition flex items-center gap-1 whitespace-nowrap ${
               selectedPlayerId === 'all' && activeTab === 'ai_insights'
                 ? 'bg-emerald-600 text-white'
                 : 'bg-slate-800 text-slate-400 hover:text-white'
@@ -273,16 +309,35 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ match, onClose }) 
             <Sparkles className="w-3 h-3 text-amber-300" />
             <span>บทวิเคราะห์ฟอร์ม</span>
           </button>
+
+          <button
+            type="button"
+            onClick={handleSaveChartImage}
+            disabled={isSavingImage}
+            className="px-2.5 py-1 rounded-lg bg-sky-600 hover:bg-sky-500 active:scale-95 disabled:opacity-50 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm transition whitespace-nowrap"
+            title="บันทึกกราฟสถิติเป็นไฟล์ภาพ PNG"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>{isSavingImage ? 'กำลังบันทึก...' : 'เซฟภาพกราฟ'}</span>
+          </button>
+
           {onClose && (
             <button
               onClick={onClose}
-              className="ml-2 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-300"
+              className="ml-1 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-300 whitespace-nowrap"
             >
               ✕ ปิด
             </button>
           )}
         </div>
       </div>
+
+      {saveSuccess && (
+        <div className="mx-3 mt-2 px-3 py-2 rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-xs font-semibold flex items-center gap-2 shrink-0">
+          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+          <span>บันทึกภาพกราฟสถิติเป็นไฟล์ PNG เรียบร้อยแล้ว!</span>
+        </div>
+      )}
 
       {/* Player Selector Bar (เลือกดูเป็นรายบุคคล หรือ ดูแบบร่วมทั้งหมด) */}
       <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-950/80 border-b border-slate-800 shrink-0 overflow-x-auto text-xs">
@@ -338,7 +393,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ match, onClose }) 
                 <div>
                   <div className="flex items-center gap-2">
                     <h3 className="text-sm font-black text-white">{selectedPlayer.name}</h3>
-                    <span className={`text-[10px] font-bold px-2 py-0.2 rounded-full border ${
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
                       selectedPlayer.team === 'team1'
                         ? 'bg-emerald-950 border-emerald-500/50 text-emerald-300'
                         : 'bg-sky-950 border-sky-500/50 text-sky-300'

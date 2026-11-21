@@ -13,14 +13,13 @@ import {
   createInitialMatch,
   recordPoint,
   undoLastPoint,
-  redoLastPoint,
   registerFirstServeFault,
   registerSecondServeFault,
   resetServeFault,
   setServerTeam,
   updatePlayerNames,
 } from './utils/tennisEngine';
-import { isForbiddenName, getSavedPlayerRoster } from './utils/playerRoster';
+import { isForbiddenName } from './utils/playerRoster';
 import { initAuth } from './services/firebaseAuth';
 import { offlineSync } from './services/offlineSync';
 import { updateMatchSummarySheet } from './services/googleSheets';
@@ -35,8 +34,9 @@ import { EditPlayerModal } from './components/EditPlayerModal';
 import { SheetsSyncModal } from './components/SheetsSyncModal';
 import { MatchSetupModal } from './components/MatchSetupModal';
 import { PostMatchModal } from './components/PostMatchModal';
+import { MatchHistoryModal } from './components/MatchHistoryModal';
 
-import { Smartphone, RotateCcw, X, WifiOff } from 'lucide-react';
+import { Smartphone, X, WifiOff } from 'lucide-react';
 
 export default function App() {
   // 1. Match State
@@ -80,6 +80,8 @@ export default function App() {
   // 2. Modals state
   const [isAnalyticsOpen, setIsAnalyticsOpen] = useState(false);
   const [isInfographicOpen, setIsInfographicOpen] = useState(false);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [inspectedMatch, setInspectedMatch] = useState<MatchState | null>(null);
   const [isSheetsModalOpen, setIsSheetsModalOpen] = useState(false);
   const [isSetupOpen, setIsSetupOpen] = useState(false);
   const [isPostMatchOpen, setIsPostMatchOpen] = useState(false);
@@ -221,15 +223,6 @@ export default function App() {
     saveMatchToFirestore(previousMatch, user?.uid);
   };
 
-  // Redo Last Point
-  const handleRedo = () => {
-    if (!match.redoStack || match.redoStack.length === 0) return;
-    const nextMatch = redoLastPoint(match);
-    setMatch(nextMatch);
-    offlineSync.saveMatchLocally(nextMatch);
-    saveMatchToFirestore(nextMatch, user?.uid);
-  };
-
   // 1st Serve Fault
   const handleFirstServeFault = () => {
     sound.playFault();
@@ -299,6 +292,9 @@ export default function App() {
     t2DoublesPartner?: string,
     initialServer: 'team1' | 'team2' = 'team1'
   ) => {
+    if (match.pointsHistory.length > 0 || match.isFinished) {
+      offlineSync.saveMatchToHistory(match);
+    }
     offlineSync.clearSyncedPointIds();
     const newMatch = createInitialMatch(settings, t1Name, t2Name, t1DoublesPartner, t2DoublesPartner);
     newMatch.currentServerTeam = initialServer;
@@ -311,8 +307,21 @@ export default function App() {
     }
   };
 
+  // Load / Resume Match from History
+  const handleLoadMatchFromHistory = (loadedMatch: MatchState) => {
+    if (match.id !== loadedMatch.id && (match.pointsHistory.length > 0 || match.isFinished)) {
+      offlineSync.saveMatchToHistory(match);
+    }
+    setMatch(loadedMatch);
+    offlineSync.saveMatchLocally(loadedMatch);
+    setIsPostMatchOpen(false);
+  };
+
   // Reset Match to 0-0 with Current Players & Rules
   const handleResetCurrentMatch = () => {
+    if (match.pointsHistory.length > 0 || match.isFinished) {
+      offlineSync.saveMatchToHistory(match);
+    }
     offlineSync.clearSyncedPointIds();
     const t1Name = match.team1.players[0]?.name || match.team1.name;
     const t2Name = match.team2.players[0]?.name || match.team2.name;
@@ -356,14 +365,18 @@ export default function App() {
         onOpenDetailModal={(mode, team) => setDetailModal({ isOpen: true, mode, team })}
         onOpenEditPlayers={() => setIsEditPlayersOpen(true)}
         onUndo={handleUndo}
-        onRedo={handleRedo}
-        canRedo={Boolean(match.redoStack && match.redoStack.length > 0)}
         onFirstServeFault={handleFirstServeFault}
         onSecondServeFault={handleSecondServeFault}
         onResetServeFault={handleResetServeFault}
-        onToggleServer={handleToggleServer}
-        onOpenAnalytics={() => setIsAnalyticsOpen(true)}
-        onOpenInfographic={() => setIsInfographicOpen(true)}
+        onOpenHistory={() => setIsHistoryOpen(true)}
+        onOpenAnalytics={() => {
+          setInspectedMatch(null);
+          setIsAnalyticsOpen(true);
+        }}
+        onOpenInfographic={() => {
+          setInspectedMatch(null);
+          setIsInfographicOpen(true);
+        }}
         onOpenSheetsSync={() => setIsSheetsModalOpen(true)}
         onOpenSettings={() => setIsSetupOpen(true)}
         onResetMatch={handleResetCurrentMatch}
@@ -402,11 +415,35 @@ export default function App() {
         />
       )}
 
+      {/* Match History Modal */}
+      {isHistoryOpen && (
+        <MatchHistoryModal
+          isOpen={isHistoryOpen}
+          onClose={() => setIsHistoryOpen(false)}
+          currentMatchId={match.id}
+          onSelectAnalytics={(m) => {
+            setInspectedMatch(m);
+            setIsAnalyticsOpen(true);
+          }}
+          onSelectInfographic={(m) => {
+            setInspectedMatch(m);
+            setIsInfographicOpen(true);
+          }}
+          onLoadMatch={handleLoadMatchFromHistory}
+        />
+      )}
+
       {/* Infographic Generator Modal */}
       {isInfographicOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-xs p-3">
           <div className="w-full max-w-2xl h-[92vh]">
-            <MatchInfographicCard match={match} onClose={() => setIsInfographicOpen(false)} />
+            <MatchInfographicCard
+              match={inspectedMatch || match}
+              onClose={() => {
+                setIsInfographicOpen(false);
+                setInspectedMatch(null);
+              }}
+            />
           </div>
         </div>
       )}
@@ -415,7 +452,13 @@ export default function App() {
       {isAnalyticsOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-3">
           <div className="w-full max-w-2xl h-[92vh]">
-            <AnalyticsView match={match} onClose={() => setIsAnalyticsOpen(false)} />
+            <AnalyticsView
+              match={inspectedMatch || match}
+              onClose={() => {
+                setIsAnalyticsOpen(false);
+                setInspectedMatch(null);
+              }}
+            />
           </div>
         </div>
       )}

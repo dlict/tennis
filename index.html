@@ -17,10 +17,22 @@
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
+    <script>
+      // Capture beforeinstallprompt early before React mounts so Android/Chrome/Samsung never loses it
+      window.__deferredPWAInstallPrompt = null;
+      window.addEventListener('beforeinstallprompt', function (e) {
+        e.preventDefault();
+        window.__deferredPWAInstallPrompt = e;
+        window.dispatchEvent(new CustomEvent('pwa-install-available'));
+      });
+      window.addEventListener('appinstalled', function () {
+        window.__deferredPWAInstallPrompt = null;
+        window.dispatchEvent(new CustomEvent('pwa-app-installed'));
+      });
+    </script>
   </head>
   <body class="h-full overflow-hidden select-none bg-slate-950 font-sans antialiased">
     <div id="root" class="h-full w-full"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
-
