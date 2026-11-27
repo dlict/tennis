@@ -32,7 +32,8 @@ const STROKE_TRANSLATIONS: Record<string, string> = {
   volley: 'วอลเลย์หน้าเน็ต',
   drive_volley: 'ไดรฟ์วอลเลย์',
   smash: 'สแมช',
-  drop_shot: 'ดรอปช็อต',
+  drop_shot: 'หยอด (ดรอปช็อต)',
+  lob: 'ลูกโด่ง (Lob)',
   return_winner: 'รีเทิร์น',
   serve: 'ลูกเสิร์ฟ',
 };
@@ -425,7 +426,11 @@ export function validateWebhookUrl(rawUrl: string): string {
 }
 
 export function formatPointRow(point: PointRecord, match: MatchState): (string | number)[] {
-  const winnerName = match[point.winnerTeam]?.name || point.winnerTeam;
+  const isErrorPoint = point.category === 'unforced_error' || point.category === 'double_fault';
+  const winnerDisplay = isErrorPoint
+    ? '-'
+    : point.winnerPlayerName || match[point.winnerTeam]?.name || point.winnerTeam;
+  const winnerNameForDesc = point.winnerPlayerName || match[point.winnerTeam]?.name || point.winnerTeam;
   const serverName = match[point.servingTeam]?.name || point.servingTeam;
 
   let contextTag = '';
@@ -436,16 +441,17 @@ export function formatPointRow(point: PointRecord, match: MatchState): (string |
 
   let shotDescription = '-';
   if (point.category === 'winner') {
-    shotDescription = `${winnerName} ตี${STROKE_TRANSLATIONS[point.stroke || ''] || point.stroke || ''}วินเนอร์`;
+    shotDescription = `${winnerNameForDesc} ตี${STROKE_TRANSLATIONS[point.stroke || ''] || point.stroke || ''}วินเนอร์`;
   } else if (point.category === 'unforced_error') {
     const errorPlayer = point.errorPlayerName || (point.errorTeam ? match[point.errorTeam]?.name : 'ผู้เล่น');
     const strokeName = STROKE_TRANSLATIONS[point.errorStroke || ''] || point.errorStroke || '';
     const errDetailName = ERROR_DETAIL_TRANSLATIONS[point.errorDetail || ''] || point.errorDetail || '';
     shotDescription = `${errorPlayer} ตี${strokeName}${errDetailName ? ' ' + errDetailName : ''}`;
   } else if (point.category === 'double_fault') {
-    shotDescription = `${serverName} เสิร์ฟเสีย 2 ลูก (ดับเบิ้ลฟอลต์)`;
+    const errorPlayer = point.errorPlayerName || serverName;
+    shotDescription = `${errorPlayer} เสิร์ฟเสีย 2 ลูก (ดับเบิ้ลฟอลต์)`;
   } else if (point.category === 'ace') {
-    shotDescription = `${winnerName} เสิร์ฟเอซ (Ace)`;
+    shotDescription = `${winnerNameForDesc} เสิร์ฟเอซ (Ace)`;
   }
 
   return [
@@ -456,7 +462,7 @@ export function formatPointRow(point: PointRecord, match: MatchState): (string |
     serverName,
     point.serveCourt === 'deuce' ? 'คอร์ตขวา (Deuce)' : 'คอร์ตซ้าย (Ad)',
     point.isSecondServe ? 'เสิร์ฟสอง' : 'เสิร์ฟแรก',
-    winnerName,
+    winnerDisplay,
     CATEGORY_TRANSLATIONS[point.category] || point.category,
     shotDescription,
     point.errorDetail || '-',

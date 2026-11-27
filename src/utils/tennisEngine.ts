@@ -1033,20 +1033,24 @@ export function recordPoint(
     }
   }
 
-  // Resolve individual player IDs
-  let winnerPlayerId = shotDetails.winnerPlayerId;
-  let winnerPlayerName = shotDetails.winnerPlayerName;
-  if (!winnerPlayerId) {
-    if (winnerPlayerName) {
-      const matchP = state[pointWinner].players.find((p) => p.name === winnerPlayerName);
-      winnerPlayerId = matchP?.id || state[pointWinner].players[0]?.id;
-    } else {
-      winnerPlayerId = state[pointWinner].players[0]?.id;
-      winnerPlayerName = state[pointWinner].players[0]?.name;
+  // Resolve individual player IDs (only assign winner player on non-error points; errors track error player only)
+  const isErrorOnlyPoint =
+    shotDetails.category === 'unforced_error' || shotDetails.category === 'double_fault';
+  let winnerPlayerId = isErrorOnlyPoint ? undefined : shotDetails.winnerPlayerId;
+  let winnerPlayerName = isErrorOnlyPoint ? undefined : shotDetails.winnerPlayerName;
+  if (!isErrorOnlyPoint) {
+    if (!winnerPlayerId) {
+      if (winnerPlayerName) {
+        const matchP = state[pointWinner].players.find((p) => p.name === winnerPlayerName);
+        winnerPlayerId = matchP?.id || state[pointWinner].players[0]?.id;
+      } else {
+        winnerPlayerId = state[pointWinner].players[0]?.id;
+        winnerPlayerName = state[pointWinner].players[0]?.name;
+      }
+    } else if (!winnerPlayerName) {
+      const matchP = state[pointWinner].players.find((p) => p.id === winnerPlayerId);
+      winnerPlayerName = matchP?.name;
     }
-  } else if (!winnerPlayerName) {
-    const matchP = state[pointWinner].players.find((p) => p.id === winnerPlayerId);
-    winnerPlayerName = matchP?.name;
   }
 
   let errorPlayerId = shotDetails.errorPlayerId;
@@ -1474,6 +1478,21 @@ export function updateMatchAdRule(state: MatchState, adRule: AdRule): MatchState
 }
 
 /**
+ * Update whether players switch court sides (changeEnds) mid-match
+ */
+export function updateMatchChangeEnds(state: MatchState, changeEnds: boolean): MatchState {
+  if (Boolean(state.settings.changeEnds) === Boolean(changeEnds)) return state;
+  return {
+    ...state,
+    settings: {
+      ...state.settings,
+      changeEnds,
+    },
+    updatedAt: Date.now(),
+  };
+}
+
+/**
  * Compute detailed analytics statistics for both teams
  */
 export function calculateMatchStats(pointsHistory: PointRecord[], sets: SetScore[]): {
@@ -1496,7 +1515,7 @@ export function calculateMatchStats(pointsHistory: PointRecord[], sets: SetScore
     winnersBreakdown: { forehand: 0, backhand: 0, volley: 0, driveVolley: 0, smash: 0, dropShot: 0, returnWinner: 0 },
     unforcedErrors: 0,
     unforcedErrorsBreakdown: { net: 0, wide: 0, long: 0, frame: 0 },
-    unforcedErrorsByStroke: { forehand: 0, backhand: 0, volley: 0, driveVolley: 0, smash: 0, return: 0 },
+    unforcedErrorsByStroke: { forehand: 0, backhand: 0, volley: 0, driveVolley: 0, smash: 0, dropShot: 0, lob: 0, return: 0 },
     breakPointsWon: 0,
     breakPointsOpportunities: 0,
     netPointsWon: 0,
@@ -1591,6 +1610,8 @@ export function calculateMatchStats(pointsHistory: PointRecord[], sets: SetScore
       else if (pt.errorStroke === 'volley') errorStats.unforcedErrorsByStroke.volley += 1;
       else if (pt.errorStroke === 'drive_volley') errorStats.unforcedErrorsByStroke.driveVolley += 1;
       else if (pt.errorStroke === 'smash') errorStats.unforcedErrorsByStroke.smash += 1;
+      else if (pt.errorStroke === 'drop_shot') errorStats.unforcedErrorsByStroke.dropShot += 1;
+      else if (pt.errorStroke === 'lob') errorStats.unforcedErrorsByStroke.lob += 1;
       else if (pt.errorStroke === 'return_winner' || pt.errorDetail === 'unforced_return') {
         errorStats.unforcedErrorsByStroke.return += 1;
       }

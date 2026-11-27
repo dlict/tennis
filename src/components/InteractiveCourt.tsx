@@ -231,15 +231,15 @@ export const InteractiveCourt: React.FC<InteractiveCourtProps> = ({
   const currentServer = getCurrentServer(match);
   const currentReceiver = getCurrentReceiver(match);
 
-  // Total games played in current set determines side change (after odd games sum: 1, 3, 5...)
+  // Total games played in current set determines side change (only when settings.changeEnds is true)
+  const shouldChangeEnds = Boolean(settings.changeEnds);
   const totalGamesInSet = currentSet ? currentSet.team1Games + currentSet.team2Games : 0;
   const isOddGamesSum = totalGamesInSet % 2 === 1;
 
-  // Ends swap automatically when games sum in current set is odd,
-  // and in tiebreak, ends additionally swap every 6 points (6, 12, 18...)
-  let isSwapped = isOddGamesSum;
+  // Ends swap automatically only if shouldChangeEnds is enabled
+  let isSwapped = shouldChangeEnds ? isOddGamesSum : false;
   let isTiebreakChangeEnds = false;
-  if (currentGame.isTiebreak) {
+  if (shouldChangeEnds && currentGame.isTiebreak) {
     const tbPoints = currentGame.team1Points + currentGame.team2Points;
     const tbSwaps = Math.floor(tbPoints / 6);
     if (tbSwaps % 2 === 1) {
@@ -447,6 +447,15 @@ export const InteractiveCourt: React.FC<InteractiveCourtProps> = ({
         </div>
 
         <div className="flex items-center gap-1 shrink-0 whitespace-nowrap">
+          <span
+            className={`px-1.5 py-0.5 rounded text-[9px] font-bold border ${
+              shouldChangeEnds
+                ? 'bg-sky-950/70 text-sky-300 border-sky-700/60'
+                : 'bg-slate-800/90 text-slate-300 border-slate-700'
+            }`}
+          >
+            {shouldChangeEnds ? '🔄 สลับฝั่งอัตโนมัติ' : '📌 ไม่สลับฝั่ง'}
+          </span>
           {isTiebreakChangeEnds && (
             <span className="bg-rose-500 text-white px-1.5 py-0.5 rounded text-[9px] font-black animate-pulse">
               🔄 เปลี่ยนแดน!

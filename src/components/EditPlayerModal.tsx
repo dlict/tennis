@@ -20,7 +20,8 @@ interface EditPlayerModalProps {
     serverTeam: 'team1' | 'team2',
     t1Players?: string[],
     t2Players?: string[],
-    adRule?: AdRule
+    adRule?: AdRule,
+    changeEnds?: boolean
   ) => void;
 }
 
@@ -45,6 +46,7 @@ export const EditPlayerModal: React.FC<EditPlayerModalProps> = ({
 
   const [serverTeam, setServerTeamState] = useState<'team1' | 'team2'>(match.currentServerTeam);
   const [adRule, setAdRule] = useState<AdRule>(match.settings.adRule);
+  const [changeEnds, setChangeEnds] = useState<boolean>(Boolean(match.settings.changeEnds));
   const [savedRoster, setSavedRoster] = useState<string[]>(() => getSavedPlayerRoster());
   const [showRosterManager, setShowRosterManager] = useState<boolean>(false);
   const [newPlayerInput, setNewPlayerInput] = useState<string>('');
@@ -91,13 +93,13 @@ export const EditPlayerModal: React.FC<EditPlayerModalProps> = ({
         t2P1.trim() || undefined,
         t2P2.trim() || undefined,
       ]);
-      onSave(team1DisplayName, team2DisplayName, serverTeam, [p1, p2], [p3, p4], adRule);
+      onSave(team1DisplayName, team2DisplayName, serverTeam, [p1, p2], [p3, p4], adRule, changeEnds);
     } else {
       const p1 = t1P1.trim() || 'ผู้เล่น 1';
       const p2 = t2P1.trim() || 'ผู้เล่น 2';
 
       saveMultiplePlayersToRoster([t1P1.trim() || undefined, t2P1.trim() || undefined]);
-      onSave(p1, p2, serverTeam, [p1], [p2], adRule);
+      onSave(p1, p2, serverTeam, [p1], [p2], adRule, changeEnds);
     }
     onClose();
   };
@@ -407,6 +409,43 @@ export const EditPlayerModal: React.FC<EditPlayerModalProps> = ({
               <option value="2-deuce">ดิวซ์ 2 ลูกจบ (2-Deuce • แต้มตัดสินเลือกคนรับได้)</option>
               <option value="no-ad">No-Ad (40-40 แต้มตัดสินทันที)</option>
             </select>
+          </div>
+
+          {/* Side Switching Toggle */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-xs font-semibold text-slate-200">
+                🔄 การสลับฝั่งในสนาม:
+              </label>
+              <span className="text-[10px] text-emerald-400 font-semibold">แนะนำ: ไม่สลับฝั่ง</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <button
+                type="button"
+                onClick={() => setChangeEnds(false)}
+                className={`py-2 px-2.5 rounded-xl border font-bold transition flex flex-col items-center justify-center gap-0.5 text-center ${
+                  !changeEnds
+                    ? 'bg-emerald-600 border-emerald-300 text-white shadow-md ring-1 ring-emerald-400/60'
+                    : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-750'
+                }`}
+              >
+                <span>📌 ไม่สลับฝั่ง (แนะนำ)</span>
+                <span className="text-[10px] font-normal opacity-90">อยู่ฝั่งเดิมตลอด</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setChangeEnds(true)}
+                className={`py-2 px-2.5 rounded-xl border font-bold transition flex flex-col items-center justify-center gap-0.5 text-center ${
+                  changeEnds
+                    ? 'bg-sky-600 border-sky-300 text-white shadow-md ring-1 ring-sky-400/60'
+                    : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-750 hover:text-slate-200'
+                }`}
+              >
+                <span>🔄 สลับฝั่งอัตโนมัติ</span>
+                <span className="text-[10px] font-normal opacity-90">สลับเกมคี่ / ไทเบรก</span>
+              </button>
+            </div>
           </div>
 
           {/* Save Button */}

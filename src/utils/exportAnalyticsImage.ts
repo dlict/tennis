@@ -36,6 +36,8 @@ export interface PlayerChartExportData {
     smash: number;
     volley: number;
     driveVolley: number;
+    dropShot: number;
+    lob: number;
     return: number;
     doubleFault: number;
   };
@@ -211,7 +213,7 @@ export async function exportOverallAnalyticsImage(options: {
   const isInsights = activeTab === 'ai_insights';
   const height = isInsights
     ? Math.max(760, 320 + insights.length * 76)
-    : Math.max(1380, 200 + metrics.length * 58 + 315 + 75);
+    : Math.max(1420, 200 + metrics.length * 58 + 345 + 75);
 
   const canvas = document.createElement('canvas');
   canvas.width = width;
@@ -376,7 +378,7 @@ export async function exportOverallAnalyticsImage(options: {
   // Bottom 2 Breakdown Panels — True 2-Sided Layout (Team 1 Left | Label Center | Team 2 Right)
   const panelY = y + 10;
   const panelW = (barCardWidth - 20) / 2;
-  const panelH = 315;
+  const panelH = 345;
   const t1 = stats.team1;
   const t2 = stats.team2;
 
@@ -468,6 +470,7 @@ export async function exportOverallAnalyticsImage(options: {
     ['❌ ดับเบิ้ลฟอลต์ (DF)', t1.doubleFaults, t2.doubleFaults],
     ['💪 FH เสีย / 🎯 BH เสีย', t1.unforcedErrorsByStroke.forehand + t1.unforcedErrorsByStroke.backhand, t2.unforcedErrorsByStroke.forehand + t2.unforcedErrorsByStroke.backhand],
     ['🚀 ไดรฟ์วอลเลย์เสีย / ⚡ วอลเลย์เสีย', t1.unforcedErrorsByStroke.driveVolley + t1.unforcedErrorsByStroke.volley, t2.unforcedErrorsByStroke.driveVolley + t2.unforcedErrorsByStroke.volley],
+    ['🪶 หยอดเสีย / 🎈 ลูกโด่งเสีย', t1.unforcedErrorsByStroke.dropShot + t1.unforcedErrorsByStroke.lob, t2.unforcedErrorsByStroke.dropShot + t2.unforcedErrorsByStroke.lob],
   ];
 
   errRows.forEach(([label, v1, v2], idx) => {
@@ -507,7 +510,7 @@ export async function exportFourPlayersComparisonImage(options: {
   const { match, players } = options;
   const count = Math.max(2, players.length);
   const width = count >= 3 ? 1360 : 1120;
-  const height = 890;
+  const height = 925;
 
   const canvas = document.createElement('canvas');
   canvas.width = width;
@@ -533,7 +536,7 @@ export async function exportFourPlayersComparisonImage(options: {
   const totalW = width - 112;
   const colW = (totalW - colGap * (count - 1)) / count;
   const cardY = 122;
-  const cardH = 710;
+  const cardH = 742;
 
   players.forEach((p, idx) => {
     const cx = 56 + idx * (colW + colGap);
@@ -579,6 +582,7 @@ export async function exportFourPlayersComparisonImage(options: {
       ['🪵 ขอบไม้ (Frame)', p.errorDetails.frame, '#fda4af'],
       ['🕸️ ติดเน็ต / ออก', `${p.errorDetails.net} / ${p.errorDetails.wide + p.errorDetails.long}`, '#fda4af'],
       ['🚀 ไดรฟ์วอลเลย์เสีย', p.errorDetails.driveVolley, '#fda4af'],
+      ['🪶 หยอด / 🎈 โด่งเสีย', `${p.errorDetails.dropShot} / ${p.errorDetails.lob}`, '#fda4af'],
     ];
 
     rows.forEach(([label, val, col], ri) => {
@@ -763,9 +767,9 @@ export async function exportPlayerAnalyticsImage(options: {
       err: player.errorDetails.driveVolley,
     },
     {
-      label: '🪶 ดรอปช็อต / เสิร์ฟเอซ (Drop Shot / Ace)',
-      win: player.winnerStrokes.dropShot + player.aces,
-      err: player.doubleFaults,
+      label: '🪶 หยอด / 🎈 ลูกโด่ง (Drop / Lob)',
+      win: player.winnerStrokes.dropShot,
+      err: player.errorDetails.dropShot + player.errorDetails.lob,
     },
   ];
 

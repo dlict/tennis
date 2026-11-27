@@ -199,6 +199,8 @@ export interface TeamStats {
     volley: number;
     driveVolley: number;
     smash: number;
+    dropShot: number;
+    lob: number;
     return: number;
   };
   
@@ -219,6 +221,7 @@ export interface MatchSettings {
   adRule: AdRule;
   finalSetTiebreak: 'standard' | 'super';
   courtSurface: 'hard' | 'clay' | 'grass';
+  changeEnds?: boolean;
   tournamentName?: string;
   roundName?: string;
 }

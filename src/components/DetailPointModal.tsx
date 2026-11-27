@@ -338,13 +338,15 @@ export const DetailPointModal: React.FC<DetailPointModalProps> = ({
               <label className="text-xs font-semibold text-rose-300 block mb-1.5">
                 ตีลูกอะไรเสีย:
               </label>
-              <div className="grid grid-cols-3 gap-1.5 text-xs">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-xs">
                 {[
                   { id: 'forehand', label: 'โฟร์แฮนด์' },
                   { id: 'backhand', label: 'แบ็คแฮนด์' },
                   { id: 'smash', label: '💥 สแมช' },
                   { id: 'volley', label: '⚡ วอลเลย์' },
                   { id: 'drive_volley', label: '🚀 ไดรฟ์วอลเลย์' },
+                  { id: 'drop_shot', label: '🪶 หยอด' },
+                  { id: 'lob', label: '🎈 ลูกโด่ง' },
                   { id: 'return_winner', label: '🎯 รับเสิร์ฟ' },
                 ].map((item) => (
                   <button
@@ -406,7 +408,7 @@ export const DetailPointModal: React.FC<DetailPointModalProps> = ({
           <span className="truncate">
             {mode === 'winner'
               ? `บันทึกวินเนอร์ของ "${effectivePlayerName}" (แต้มให้ ${match[winnerTeam].name})`
-              : `บันทึกตีเสียของ "${effectivePlayerName}" (แต้มให้ ${match[winnerTeam].name})`}
+              : `บันทึกตีเสียของ "${effectivePlayerName}"`}
           </span>
         </button>
       </div>

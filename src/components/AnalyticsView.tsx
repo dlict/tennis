@@ -199,6 +199,8 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ match, onClose }) 
       smash: errors.filter((p) => p.errorStroke === 'smash').length,
       volley: errors.filter((p) => p.errorStroke === 'volley').length,
       driveVolley: errors.filter((p) => p.errorStroke === 'drive_volley').length,
+      dropShot: errors.filter((p) => p.errorStroke === 'drop_shot').length,
+      lob: errors.filter((p) => p.errorStroke === 'lob').length,
       return: errors.filter((p) => p.errorStroke === 'return_winner' || p.errorDetail === 'unforced_return').length,
       doubleFault: doubleFaults.length,
     };
@@ -601,6 +603,8 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ match, onClose }) 
     { icon: '⚡', label: 'วอลเลย์เสีย', v1: t1.unforcedErrorsByStroke.volley, v2: t2.unforcedErrorsByStroke.volley },
     { icon: '🚀', label: 'ไดรฟ์วอลเลย์เสีย', v1: t1.unforcedErrorsByStroke.driveVolley, v2: t2.unforcedErrorsByStroke.driveVolley },
     { icon: '💥', label: 'สแมชเสีย', v1: t1.unforcedErrorsByStroke.smash, v2: t2.unforcedErrorsByStroke.smash },
+    { icon: '🪶', label: 'หยอดเสีย', v1: t1.unforcedErrorsByStroke.dropShot, v2: t2.unforcedErrorsByStroke.dropShot },
+    { icon: '🎈', label: 'ลูกโด่งเสีย', v1: t1.unforcedErrorsByStroke.lob, v2: t2.unforcedErrorsByStroke.lob },
     { icon: '↩️', label: 'รับเสิร์ฟเสีย', v1: t1.unforcedErrorsByStroke.return, v2: t2.unforcedErrorsByStroke.return },
   ];
 
@@ -933,6 +937,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ match, onClose }) 
                     { icon: '💥', label: 'Smash', w: pStats.winnerStrokes.smash, e: pStats.errorDetails.smash },
                     { icon: '⚡', label: 'Volley', w: pStats.winnerStrokes.volley, e: pStats.errorDetails.volley },
                     { icon: '🚀', label: 'Drive Volley', w: pStats.winnerStrokes.driveVolley, e: pStats.errorDetails.driveVolley },
+                    { icon: '🪶', label: 'หยอด / 🎈 ลูกโด่ง', w: pStats.winnerStrokes.dropShot, e: pStats.errorDetails.dropShot + pStats.errorDetails.lob },
                   ];
 
                   return (
@@ -1047,6 +1052,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ match, onClose }) 
                         <div className="flex justify-between"><span className="text-slate-400">↔️ ออกข้าง / ออกหลัง:</span><span className="font-bold text-slate-200">{pStats.errorDetails.wide} / {pStats.errorDetails.long}</span></div>
                         <div className="flex justify-between"><span className="text-slate-400">🪵 ขอบไม้ (Frame):</span><span className="font-bold text-amber-300">{pStats.errorDetails.frame}</span></div>
                         <div className="flex justify-between"><span className="text-slate-400">🚀 ไดรฟ์วอลเลย์เสีย:</span><span className="font-bold text-rose-300">{pStats.errorDetails.driveVolley}</span></div>
+                        <div className="flex justify-between"><span className="text-slate-400">🪶 หยอด / 🎈 ลูกโด่งเสีย:</span><span className="font-bold text-rose-300">{pStats.errorDetails.dropShot} / {pStats.errorDetails.lob}</span></div>
                         <div className="flex justify-between"><span className="text-slate-400">💪 FH / 🎯 BH เสีย:</span><span className="font-bold text-slate-200">{pStats.errorDetails.forehand} / {pStats.errorDetails.backhand}</span></div>
                       </div>
 

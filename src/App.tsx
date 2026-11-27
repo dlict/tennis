@@ -17,6 +17,7 @@ import {
   setDecidingReceiver,
   setServerTeam,
   updateMatchAdRule,
+  updateMatchChangeEnds,
   updatePlayerNames,
 } from './utils/tennisEngine';
 import { isForbiddenName } from './utils/playerRoster';
@@ -292,19 +293,23 @@ export default function App() {
     offlineSync.saveMatchLocally(updated);
   };
 
-  // Save Player Names, Server & Deuce Rule
+  // Save Player Names, Server, Deuce Rule & Change Ends
   const handleSavePlayers = (
     t1Name: string,
     t2Name: string,
     serverTeam: 'team1' | 'team2',
     t1Players?: string[],
     t2Players?: string[],
-    adRule?: AdRule
+    adRule?: AdRule,
+    changeEnds?: boolean
   ) => {
     let updated = updatePlayerNames(match, t1Name, t2Name, t1Players, t2Players);
     updated = setServerTeam(updated, serverTeam);
     if (adRule) {
       updated = updateMatchAdRule(updated, adRule);
+    }
+    if (typeof changeEnds === 'boolean') {
+      updated = updateMatchChangeEnds(updated, changeEnds);
     }
     setMatch(updated);
     offlineSync.saveMatchLocally(updated);

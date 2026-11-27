@@ -39,6 +39,7 @@ export const MatchSetupModal: React.FC<MatchSetupModalProps> = ({
   const [adRule, setAdRule] = useState<AdRule>('advantage');
   const [finalSetTiebreak, setFinalSetTiebreak] = useState<'standard' | 'super'>('standard');
   const [courtSurface, setCourtSurface] = useState<'hard' | 'clay' | 'grass'>('hard');
+  const [changeEnds, setChangeEnds] = useState<boolean>(false);
 
   // Input states start empty so user types their own player names
   const [t1Name, setT1Name] = useState('');
@@ -100,6 +101,7 @@ export const MatchSetupModal: React.FC<MatchSetupModalProps> = ({
       adRule,
       finalSetTiebreak,
       courtSurface,
+      changeEnds,
     };
 
     onStartMatch(
@@ -454,6 +456,45 @@ export const MatchSetupModal: React.FC<MatchSetupModalProps> = ({
                 <option value="team1">{t1Name || 'ฝ่ายที่ 1'}</option>
                 <option value="team2">{t2Name || 'ฝ่ายที่ 2'}</option>
               </select>
+            </div>
+          </div>
+
+          {/* Side Switching Setting (Emphasize No Change Ends by default) */}
+          <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800 space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-slate-200">
+                🔄 การสลับฝั่งในสนาม:
+              </label>
+              <span className="text-[10px] text-emerald-400 font-semibold">
+                แนะนำ: ไม่สลับฝั่ง
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <button
+                type="button"
+                onClick={() => setChangeEnds(false)}
+                className={`py-2 px-2.5 rounded-xl border font-bold transition flex flex-col items-center justify-center gap-0.5 text-center ${
+                  !changeEnds
+                    ? 'bg-emerald-600 border-emerald-300 text-white shadow-md ring-1 ring-emerald-400/60'
+                    : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-750'
+                }`}
+              >
+                <span>📌 ไม่สลับฝั่ง (แนะนำ)</span>
+                <span className="text-[10px] font-normal opacity-90">อยู่ฝั่งเดิมตลอดแมตช์</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setChangeEnds(true)}
+                className={`py-2 px-2.5 rounded-xl border font-bold transition flex flex-col items-center justify-center gap-0.5 text-center ${
+                  changeEnds
+                    ? 'bg-sky-600 border-sky-300 text-white shadow-md ring-1 ring-sky-400/60'
+                    : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-750 hover:text-slate-200'
+                }`}
+              >
+                <span>🔄 สลับฝั่งอัตโนมัติ</span>
+                <span className="text-[10px] font-normal opacity-90">สลับเมื่อจบเกมคี่ / ไทเบรก</span>
+              </button>
             </div>
           </div>
 
